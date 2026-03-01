@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "776211089232",
+    "project_id": "smart-home-iot-app-fdc1a",
+    "storage_bucket": "smart-home-iot-app-fdc1a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:776211089232:android:93c33186d9a9064da30e55",
+        "android_client_info": {
+          "package_name": "com.example.smart_iot_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCnZ_fOsiQnd_oJxnr-bGYUnj0Qy8O31wg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
