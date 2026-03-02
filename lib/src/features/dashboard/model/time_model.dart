@@ -43,6 +43,7 @@ import 'package:flutter/material.dart';
 class TimerDevice {
   final String id;
   final String title;
+  final int day; // NEW: day of month, e.g., 1-31
   final TimeOfDay startTime;
   final TimeOfDay stopTime;
   final int espPin;
@@ -51,6 +52,7 @@ class TimerDevice {
   TimerDevice({
     required this.id,
     required this.title,
+    required this.day, // include day in constructor
     required this.startTime,
     required this.stopTime,
     required this.espPin,
@@ -61,6 +63,7 @@ class TimerDevice {
   TimerDevice copyWith({
     String? id,
     String? title,
+    int? day,
     TimeOfDay? startTime,
     TimeOfDay? stopTime,
     int? espPin,
@@ -69,6 +72,7 @@ class TimerDevice {
     return TimerDevice(
       id: id ?? this.id,
       title: title ?? this.title,
+      day: day ?? this.day,
       startTime: startTime ?? this.startTime,
       stopTime: stopTime ?? this.stopTime,
       espPin: espPin ?? this.espPin,
@@ -85,6 +89,7 @@ class TimerDevice {
   Map<String, dynamic> toMap() {
     return {
       'title': title,
+      'day': day,
       'startHour': startTime.hour,
       'startMinute': startTime.minute,
       'stopHour': stopTime.hour,
@@ -94,11 +99,12 @@ class TimerDevice {
     };
   }
 
-  // Optional: Create from Map (very useful for Firebase read)
+  // Create from Map (Firebase read)
   factory TimerDevice.fromMap(String id, Map<dynamic, dynamic> map) {
     return TimerDevice(
       id: id,
       title: map['title'] ?? '',
+      day: map['day'] ?? 1, // read day from map
       startTime: TimeOfDay(
         hour: map['startHour'] ?? 0,
         minute: map['startMinute'] ?? 0,

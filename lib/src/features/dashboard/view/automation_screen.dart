@@ -32,15 +32,7 @@ class _AutomationScreenState extends ConsumerState<AutomationScreen> {
     {'on': const TimeOfDay(hour: 8, minute: 0), 'off': const TimeOfDay(hour: 17, minute: 0)},
   ];
 
-  // 1. Logic: Clear All Settings
-  // void _clearAllSettings() {
-  //   setState(() {
-  //     _selectedDays.clear();
-  //     _timePulses.clear();
-  //     isMotorManualOn = false;
-  //     _isSynced = false;
-  //   });
-  // }
+
 
   // 2. Logic: Time Picker Implementation
   Future<void> _clearAllSettings() async {
@@ -82,37 +74,8 @@ class _AutomationScreenState extends ConsumerState<AutomationScreen> {
     }
   }
 
-  // 3. Logic: Syncing to Hardware
-  // Future<void> _syncToMotor() async {
-  //   try {
-  //     if (_timePulses.isEmpty && !isMotorManualOn) {
-  //       throw const DeviceException(
-  //         message: "Please add at least one time slot or enable manual mode.",
-  //         type: DeviceErrorType.data,
-  //       );
-  //     }
-  //
-  //     // Simulate API/GSM Call Delay
-  //     await Future.delayed(const Duration(milliseconds: 500));
-  //
-  //     setState(() {
-  //       _isSynced = true;
-  //       isMotorManualOn = true; // Switch toggle to ON upon successful sync
-  //     });
-  //
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       const SnackBar(
-  //         backgroundColor: AppColors.success,
-  //         content: Text("MOTOR COMMAND SENT SUCCESSFULLY",
-  //             style: TextStyle(color: AppColors.white, fontWeight: FontWeight.bold)),
-  //       ),
-  //     );
-  //   } on DeviceException catch (e) {
-  //     _showError(e.message);
-  //   } catch (e) {
-  //     _showError("Critical connection error occurred.");
-  //   }
-  // }
+
+
   Future<void> _syncToMotor() async {
     try {
       if (_timePulses.isEmpty && !isMotorManualOn) {
@@ -122,19 +85,24 @@ class _AutomationScreenState extends ConsumerState<AutomationScreen> {
 
       final vm = ref.read(automationViewModelProvider.notifier);
 
-      await vm.clearAll(); // prevent duplicates
+      // Clear all previous schedules
+      await vm.clearAll();
 
-      for (var pulse in _timePulses) {
-         vm.addTimer(
-          TimerDevice(
-            id: DateTime.now().microsecondsSinceEpoch.toString(),
-            title: "Motor Timer",
-            startTime: pulse['on']!,
-            stopTime: pulse['off']!,
-            espPin: 12,
-            isEnabled: true,
-          ),
-        );
+      // Save each pulse for all selected days
+      for (var day in _selectedDays) {
+        for (var pulse in _timePulses) {
+          await vm.addTimer(
+            TimerDevice(
+              id: DateTime.now().microsecondsSinceEpoch.toString(),
+              title: "Motor Timer",
+              startTime: pulse['on']!,
+              stopTime: pulse['off']!,
+              espPin: 12,
+              isEnabled: true,
+              day: day, // Assign current day
+            ),
+          );
+        }
       }
 
       setState(() {
@@ -155,7 +123,6 @@ class _AutomationScreenState extends ConsumerState<AutomationScreen> {
       _showError("Sync failed.");
     }
   }
-
 
 
   void _showError(String msg) {
@@ -239,32 +206,6 @@ class _AutomationScreenState extends ConsumerState<AutomationScreen> {
     );
   }
 
-  // --- UI COMPONENTS ---
-
-  // Widget _buildStatusHeader() {
-  //   return Container(
-  //     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-  //     decoration: BoxDecoration(
-  //       color: _isSynced ? AppColors.primary.withOpacity(0.1) : AppColors.gray800.withOpacity(0.2),
-  //       borderRadius: BorderRadius.circular(10),
-  //       border: Border.all(color: _isSynced ? AppColors.primary : AppColors.borderDark),
-  //     ),
-  //     child: Row(
-  //       children: [
-  //         Icon(Icons.circle, size: 12, color: _isSynced ? AppColors.primary : AppColors.gray600),
-  //         const SizedBox(width: 12),
-  //         Text(
-  //           _isSynced ? "SYSTEM STATUS: ACTIVE & SYNCED" : "SYSTEM STATUS: OFFLINE / PENDING",
-  //           style: TextStyle(
-  //             color: _isSynced ? AppColors.white : AppColors.textSecondaryDark,
-  //             fontSize: 12,
-  //             fontWeight: FontWeight.bold,
-  //           ),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
 
   Widget _buildManualControlCard() {
     return Container(

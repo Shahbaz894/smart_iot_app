@@ -1,39 +1,40 @@
 import 'package:firebase_database/firebase_database.dart';
 
+
+
+import '../model/motor_status_model.dart';
+
+
 class AutomationFirebaseService {
   final FirebaseDatabase _db = FirebaseDatabase.instance;
-
   final String _basePath = "shahbaz_iot";
 
   /// ------------------------------
-  /// SAVE SCHEDULE FOR A DATE
+  /// SAVE SCHEDULE FOR A DAY
   /// ------------------------------
-  Future<void> saveScheduleForDate(
-      String dateKey,
-      Map<String, dynamic> data,
-      ) async {
-    await _db.ref("$_basePath/automation/$dateKey").set(data);
+  Future<void> saveScheduleForDay(int day, Map<String, dynamic> data) async {
+    await _db.ref("$_basePath/schedules/day_$day").set(data);
   }
 
   /// ------------------------------
-  /// DELETE SCHEDULE FOR A DATE
+  /// DELETE SCHEDULE FOR A DAY
   /// ------------------------------
-  Future<void> deleteScheduleForDate(String dateKey) async {
-    await _db.ref("$_basePath/automation/$dateKey").remove();
+  Future<void> deleteScheduleForDay(int day) async {
+    await _db.ref("$_basePath/schedules/day_$day").remove();
   }
 
   /// ------------------------------
-  /// CLEAR ALL AUTOMATION
+  /// CLEAR ALL SCHEDULES
   /// ------------------------------
-  Future<void> clearAllAutomation() async {
-    await _db.ref("$_basePath/automation").remove();
+  Future<void> clearAllSchedules() async {
+    await _db.ref("$_basePath/schedules").remove();
   }
 
   /// ------------------------------
-  /// LISTEN AUTOMATION
+  /// LISTEN SCHEDULES
   /// ------------------------------
-  Stream<DatabaseEvent> get automationStream =>
-      _db.ref("$_basePath/automation").onValue;
+  Stream<DatabaseEvent> get schedulesStream =>
+      _db.ref("$_basePath/schedules").onValue;
 
   /// ------------------------------
   /// LISTEN MOTOR STATUS
@@ -42,18 +43,52 @@ class AutomationFirebaseService {
       _db.ref("$_basePath/motor_status").onValue;
 
   /// ------------------------------
-  /// UPDATE MOTOR STATUS (Optional manual control)
+  /// GET MOTOR STATUS ONCE
   /// ------------------------------
-  // Future<void> updateMotorState(bool running) async {
-  //   await _db.ref("$_basePath/motor_status/running").set(running);
-  // }
+  Future<MotorStatus> getMotorStatusOnce() async {
+    final ref = _db.ref("$_basePath/motor_status");
+    final snapshot = await ref.get();
 
+    if (!snapshot.exists || snapshot.value == null) {
+      return MotorStatus(
+        inputVoltage: 0,
+        outputVoltage: 0,
+        current: 0,
+        frequency: 0,
+        running: false,
+      );
+    }
 
-  // tream<DatabaseEvent> get motorStatusStream =>
-  //     _db.ref("$_basePath/motor_status").onValue;
+    final data = Map<String, dynamic>.from(snapshot.value as Map);
+    return MotorStatus.fromMap(data);
+  }
 
   /// ------------------------------
-  /// UPDATE MOTOR STATUS (All parameters)
+  /// SAVE DAY WITH TIME SLOTS
+  /// ------------------------------
+  Future<void> saveDaySchedule({
+    required int day,
+    required List<Map<String, dynamic>> slots,
+  }) async {
+    final Map<String, dynamic> slotMap = {};
+
+    for (int i = 0; i < slots.length; i++) {
+      slotMap[i.toString()] = {
+        "on": slots[i]['on'],
+        "off": slots[i]['off'],
+        "pin": slots[i]['pin'],
+        "active": true,
+      };
+    }
+
+    await _db.ref("$_basePath/schedules/day_$day").set({
+      "enabled": true,
+      "slots": slotMap,
+    });
+  }
+
+  /// ------------------------------
+  /// UPDATE MOTOR STATUS
   /// ------------------------------
   Future<void> updateMotorState({
     required double inputVoltage,
@@ -62,7 +97,7 @@ class AutomationFirebaseService {
     required double frequency,
     required bool running,
   }) async {
-    await _db.ref("$_basePath/motor_status").set({
+    await _db.ref("$_basePath/motor_status").update({
       'input_voltage': inputVoltage,
       'output_voltage': outputVoltage,
       'current': current,
@@ -71,4 +106,10 @@ class AutomationFirebaseService {
     });
   }
 
+  /// ------------------------------
+  /// DELETE DAY SCHEDULE (Optional)
+  /// ------------------------------
+  Future<void> deleteDaySchedule(int day) async {
+    await _db.ref("$_basePath/schedules/day_$day").remove();
+  }
 }

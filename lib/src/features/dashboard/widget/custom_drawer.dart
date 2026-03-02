@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:smart_iot_app/src/core/contants/app_color.dart';
 import 'package:smart_iot_app/src/features/dashboard/view/automation_screen.dart';
 import 'package:smart_iot_app/src/features/dashboard/view/motor_parameter_screen.dart';
-import 'package:smart_iot_app/src/features/dashboard/view/sensor_dashboard.dart';
+
 
 
 
@@ -36,8 +36,7 @@ class ProfessionalDrawer extends StatelessWidget {
           ),
 
           // Menu Items
-          _drawerTile(context, "Tank Telemetry", Icons.speed_rounded,
-              const SensorDashboard()),
+
           _drawerTile(context, "Automation", Icons.settings_input_component_rounded,
               const AutomationScreen()),
 

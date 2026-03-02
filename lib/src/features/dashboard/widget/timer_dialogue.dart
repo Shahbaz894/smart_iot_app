@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:smart_iot_app/src/core/contants/app_color.dart';
 import 'package:smart_iot_app/src/features/dashboard/model/time_model.dart';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 
@@ -12,7 +11,9 @@ import '../provider/time_provider.dart'; // Adjust path
 // Change to ConsumerStatefulWidget to access 'ref'
 class TimerEditDialog extends ConsumerStatefulWidget {
   final TimerDevice? timer;
-  const TimerEditDialog({super.key, this.timer});
+  final Set<int> selectedDays;
+  const TimerEditDialog({super.key, this.timer,required this.selectedDays});
+
 
   @override
   ConsumerState<TimerEditDialog> createState() => _TimerEditDialogState();
@@ -136,20 +137,16 @@ class _TimerEditDialogState extends ConsumerState<TimerEditDialog> {
                           title: _titleController.text.trim(),
                           startTime: start,
                           stopTime: stop,
-                          espPin: int.tryParse(_pinController.text) ?? 22, // Default to a safe GPIO
+                          espPin: int.tryParse(_pinController.text) ?? 22, // Default GPIO
                           isEnabled: true,
+                          day: widget.selectedDays.isNotEmpty ? widget.selectedDays.first : 1, // fallback to day 1
                         );
 
-                        // 4. Update Local State (Riverpod)
-                        // ref.read(automationProvider.notifier).addTimer(newTimer);
+
                         ref.read(automationViewModelProvider.notifier).addTimer(newTimer);
 
 
-                        // 5. GSM Integration (Sending command to ESP32)
-                        // Format: "SCHED:Title,StartH,StartM,StopH,StopM,Pin"
-                        // final String smsCommand = "SCHED:${newTimer.title},${start.hour},${start.minute},${stop.hour},${stop.minute},${newTimer.espPin}";
-                        //
-                        // _sendGsmSync(smsCommand);
+
 
                         Navigator.pop(context);
                       },

@@ -5,25 +5,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:smart_iot_app/src/features/dashboard/model/motor_model.dart';
 
 import '../repository/motor_repository.dart';
-//
-// class MotorViewModel extends StateNotifier<AsyncValue<MotorModel>> {
-//   final MotorRepository repository;
-//
-//   MotorViewModel(this.repository)
-//       : super(const AsyncLoading()) {
-//     _listen();
-//   }
-//
-//   void _listen() {
-//     repository.getMotor().listen((motor) {
-//       state = AsyncData(motor);
-//     });
-//   }
-//
-//   Future<void> toggle(bool isOn) async {
-//     await repository.toggleMotor(isOn);
-//   }
-// }
+
 
 class MotorViewModel extends StateNotifier<AsyncValue<MotorModel>> {
   final MotorRepository repository;
