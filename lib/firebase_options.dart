@@ -41,48 +41,48 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBUQWSvAa3bXRaSs749yxpzp83vhj5C61Q',
-    appId: '1:776211089232:web:079d86b7f912bbb9a30e55',
-    messagingSenderId: '776211089232',
-    projectId: 'smart-home-iot-app-fdc1a',
-    authDomain: 'smart-home-iot-app-fdc1a.firebaseapp.com',
-    storageBucket: 'smart-home-iot-app-fdc1a.firebasestorage.app',
-    measurementId: 'G-ZGVYPK17NX',
+    apiKey: 'AIzaSyCudAtGW_EXV0LiOhbmMLPITpzn0SaJeAw',
+    appId: '1:302825170799:web:caaa3946cda59a0bbeaa9a',
+    messagingSenderId: '302825170799',
+    projectId: 'wellpak-cb4a2',
+    authDomain: 'wellpak-cb4a2.firebaseapp.com',
+    storageBucket: 'wellpak-cb4a2.firebasestorage.app',
+    measurementId: 'G-ET421EFEY7',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCnZ_fOsiQnd_oJxnr-bGYUnj0Qy8O31wg',
-    appId: '1:776211089232:android:93c33186d9a9064da30e55',
-    messagingSenderId: '776211089232',
-    projectId: 'smart-home-iot-app-fdc1a',
-    storageBucket: 'smart-home-iot-app-fdc1a.firebasestorage.app',
+    apiKey: 'AIzaSyCr60H0XndSlRGvHydGY2Tl-57njGQg6ZQ',
+    appId: '1:302825170799:android:1a573b84c33e7121beaa9a',
+    messagingSenderId: '302825170799',
+    projectId: 'wellpak-cb4a2',
+    storageBucket: 'wellpak-cb4a2.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCgW2nIeEmgoojK_2u3oBejHwdivQ5ZtZY',
-    appId: '1:776211089232:ios:5c0c84590d40c008a30e55',
-    messagingSenderId: '776211089232',
-    projectId: 'smart-home-iot-app-fdc1a',
-    storageBucket: 'smart-home-iot-app-fdc1a.firebasestorage.app',
+    apiKey: 'AIzaSyDugmQ9X4tERxkha2UurNaasLlsbZW67dE',
+    appId: '1:302825170799:ios:ff1df417c4a1f985beaa9a',
+    messagingSenderId: '302825170799',
+    projectId: 'wellpak-cb4a2',
+    storageBucket: 'wellpak-cb4a2.firebasestorage.app',
     iosBundleId: 'com.example.smartIotApp',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyCgW2nIeEmgoojK_2u3oBejHwdivQ5ZtZY',
-    appId: '1:776211089232:ios:5c0c84590d40c008a30e55',
-    messagingSenderId: '776211089232',
-    projectId: 'smart-home-iot-app-fdc1a',
-    storageBucket: 'smart-home-iot-app-fdc1a.firebasestorage.app',
+    apiKey: 'AIzaSyDugmQ9X4tERxkha2UurNaasLlsbZW67dE',
+    appId: '1:302825170799:ios:ff1df417c4a1f985beaa9a',
+    messagingSenderId: '302825170799',
+    projectId: 'wellpak-cb4a2',
+    storageBucket: 'wellpak-cb4a2.firebasestorage.app',
     iosBundleId: 'com.example.smartIotApp',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyBUQWSvAa3bXRaSs749yxpzp83vhj5C61Q',
-    appId: '1:776211089232:web:ed43c47900210e00a30e55',
-    messagingSenderId: '776211089232',
-    projectId: 'smart-home-iot-app-fdc1a',
-    authDomain: 'smart-home-iot-app-fdc1a.firebaseapp.com',
-    storageBucket: 'smart-home-iot-app-fdc1a.firebasestorage.app',
-    measurementId: 'G-67ZV8Z4YTG',
+    apiKey: 'AIzaSyCudAtGW_EXV0LiOhbmMLPITpzn0SaJeAw',
+    appId: '1:302825170799:web:8760973ed29e1d95beaa9a',
+    messagingSenderId: '302825170799',
+    projectId: 'wellpak-cb4a2',
+    authDomain: 'wellpak-cb4a2.firebaseapp.com',
+    storageBucket: 'wellpak-cb4a2.firebasestorage.app',
+    measurementId: 'G-7VB2G16ZS3',
   );
 }

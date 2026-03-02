@@ -6,7 +6,7 @@ import 'package:smart_iot_app/src/features/dashboard/domain/sensor_state.dart';
 import 'package:smart_iot_app/src/features/dashboard/domain/tank_state.dart';
 import 'package:smart_iot_app/src/features/dashboard/model/sensor_model.dart';
 import 'package:smart_iot_app/src/features/dashboard/provider/tank_stream_provider.dart';
-import 'package:smart_iot_app/src/features/dashboard/view/industrial_tank.dart';
+import 'package:smart_iot_app/src/features/dashboard/view/industrial_tank.dart' hide AppColors;
 import 'package:smart_iot_app/src/features/dashboard/widget/industrial_app_bar.dart';
 
 import '../provider/sensor_provider.dart';

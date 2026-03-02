@@ -8,7 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_iot_app/src/core/contants/app_color.dart';
 import 'package:smart_iot_app/src/core/exceptions/device_exception.dart';
 import 'package:smart_iot_app/src/features/dashboard/model/time_model.dart';
-import 'package:smart_iot_app/src/features/dashboard/view/switch_control_screen.dart';
+import 'package:smart_iot_app/src/features/dashboard/view/motor_screen.dart';
+
 import 'package:smart_iot_app/src/features/dashboard/widget/status_card_automation.dart';
 
 import '../provider/motor_status_provider.dart';
@@ -183,7 +184,7 @@ class _AutomationScreenState extends ConsumerState<AutomationScreen> {
           onPressed: () {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (_) => IoTControlScreen()),
+              MaterialPageRoute(builder: (_) => MotorScreen()),
             );
           },
         ),

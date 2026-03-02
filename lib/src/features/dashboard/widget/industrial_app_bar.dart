@@ -1,7 +1,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:smart_iot_app/src/core/contants/app_color.dart';
-import 'package:smart_iot_app/src/features/dashboard/view/switch_control_screen.dart';
+import 'package:smart_iot_app/src/features/dashboard/view/motor_screen.dart';
+
 
 
 
@@ -29,7 +30,7 @@ class IndustrialAppBar extends StatelessWidget implements PreferredSizeWidget {
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(
-              builder: (_) => const IoTControlScreen(),
+              builder: (_) => const MotorScreen(),
             ),
                 (route) => false,
           );
