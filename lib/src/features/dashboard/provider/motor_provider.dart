@@ -6,7 +6,6 @@ import 'package:smart_iot_app/src/features/dashboard/repository/motor_repository
 import 'package:smart_iot_app/src/features/dashboard/services/motor_rtb_services.dart';
 
 
-
 // final motorServiceProvider =
 // Provider((ref) => MotorRTDBService());
 //
@@ -16,13 +15,13 @@ import 'package:smart_iot_app/src/features/dashboard/services/motor_rtb_services
 //   ),
 // );
 //
-// final motorViewModelProvider =
-// StateNotifierProvider<MotorViewModel,
-//     AsyncValue<MotorModel>>(
-//       (ref) => MotorViewModel(
-//     ref.read(motorRepositoryProvider),
-//   ),
-// );
+final motorViewModelProvider =
+StateNotifierProvider<MotorViewModel,
+    AsyncValue<MotorModel>>(
+      (ref) => MotorViewModel(
+    ref.read(motorRepositoryProvider),
+  ),
+);
 
 final motorServiceProvider = Provider((ref) => MotorRTDBService());
 
@@ -30,7 +29,3 @@ final motorRepositoryProvider = Provider(
       (ref) => MotorRepository(ref.read(motorServiceProvider)),
 );
 
-final motorViewModelProvider =
-StateNotifierProvider<MotorViewModel, AsyncValue<MotorModel>>(
-      (ref) => MotorViewModel(ref.read(motorRepositoryProvider)),
-);

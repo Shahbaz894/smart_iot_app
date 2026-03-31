@@ -176,50 +176,7 @@ class MotorModel {
     );
   }
 
-  // Map<String, dynamic> toMap() {
-  //   return {
-  //     // Core
-  //     'isOn': isOn,
-  //     'startTime': startTime?.toIso8601String(),
-  //     'mode': mode,
-  //
-  //     // Faults
-  //     'phaseFault': phaseFault,
-  //     'voltageFault': voltageFault,
-  //     'tripFault': tripFault,
-  //     'maintenanceRequired': maintenanceRequired,
-  //
-  //     // Error
-  //     'deviceError': deviceError == null
-  //         ? null
-  //         : {
-  //       'code': deviceError!.code,
-  //       'message': deviceError!.message,
-  //     },
-  //
-  //     // Voltage
-  //     'vL1': vL1,
-  //     'vL2': vL2,
-  //     'vL3': vL3,
-  //
-  //     // Current
-  //     'cL1': cL1,
-  //     'cL2': cL2,
-  //     'cL3': cL3,
-  //
-  //     // Power
-  //     'frequency': frequency,
-  //     'load': load,
-  //     'activePower': activePower,
-  //     'reactivePower': reactivePower,
-  //     'apparentPower': apparentPower,
-  //     'powerFactor': powerFactor,
-  //   };
-  // }
 
-  // ---------------------------------------------------------------------------
-  // COPY WITH
-  // ---------------------------------------------------------------------------
   Map<String, dynamic> toMap() {
     return {
       "isOn": isOn,

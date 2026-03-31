@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:smart_iot_app/src/core/contants/app_color.dart';
 import 'package:smart_iot_app/src/features/dashboard/view/automation_screen.dart';
+import 'package:smart_iot_app/src/features/dashboard/view/fault_screen.dart';
 import 'package:smart_iot_app/src/features/dashboard/view/motor_parameter_screen.dart';
 
 
@@ -46,6 +47,8 @@ class ProfessionalDrawer extends StatelessWidget {
               const MotorParameterScreen()),
 
           const Divider(color: Colors.white10, indent: 20, endIndent: 20),
+          _drawerTile(context, "Motor Fault", Icons.settings_input_component_rounded,
+              const FaultScreen(deviceId: 5)),
 
           _drawerTile(context, "System Logs", Icons.list_alt_rounded, null),
 

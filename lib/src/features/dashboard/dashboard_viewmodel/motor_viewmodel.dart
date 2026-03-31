@@ -32,4 +32,6 @@ class MotorViewModel extends StateNotifier<AsyncValue<MotorModel>> {
     _sub?.cancel();
     super.dispose();
   }
+
+  void fetchMotorParameter(int deviceId) {}
 }
