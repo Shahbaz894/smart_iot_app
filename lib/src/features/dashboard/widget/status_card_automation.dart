@@ -3,8 +3,6 @@ import "package:smart_iot_app/src/core/contants/app_color.dart";
 
 
 
-import "package:flutter/material.dart";
-import "package:smart_iot_app/src/core/contants/app_color.dart";
 
 class StatusHeader extends StatelessWidget {
   final bool isSynced;

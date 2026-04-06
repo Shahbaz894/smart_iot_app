@@ -74,7 +74,16 @@ class _AutomationScreenState extends ConsumerState<AutomationScreen> {
     }
   }
 
+  @override
+  void initState() {
+    super.initState();
 
+    // Future.microtask(() {
+    //   ref
+    //       .read(automationViewModelProvider.notifier).
+    //       //.loadSchedules(5);
+    // });
+  }
 
   Future<void> _syncToMotor() async {
     try {
