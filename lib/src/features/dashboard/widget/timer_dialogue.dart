@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
-import 'package:smart_iot_app/src/core/contants/app_color.dart';
+import 'package:smart_iot_app/src/core/constant/app_color.dart';
+
 import 'package:smart_iot_app/src/features/dashboard/model/time_model.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';

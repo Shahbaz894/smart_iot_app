@@ -1,5 +1,6 @@
 
-import 'package:smart_iot_app/src/core/contants/app_color.dart';
+import 'package:smart_iot_app/src/core/constant/app_color.dart';
+
 import 'package:smart_iot_app/src/core/exceptions/device_exception.dart';
 
 import 'package:flutter/material.dart';
