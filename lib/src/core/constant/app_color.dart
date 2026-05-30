@@ -1,24 +1,36 @@
-import 'package:flutter/material.dart';
 
-/// Centralized color system for the Smart IoT App
-/// Supports Light & Dark themes
-/// Designed for dashboards & real-time IoT controls
+import "package:flutter/material.dart";
+
 abstract class AppColors {
   // ---------------------------------------------------------------------------
   // BRAND / PRIMARY
-  // ---------------------------------------------------------------------------
-  static const Color primary = Color(0xFFB6F000); // Neon green
-  static const Color primarySoft = Color(0xFF9EDC00);
-  static const Color primaryDark = Color(0xFF7AA800);
+  // // ---------------------------------------------------------------------------
+  // static const Color primary = Color(0xFFB6F000); // Neon green
+  // static const Color primarySoft = Color(0xFF9EDC00);
+  // static const Color primaryDark = Color(0xFF7AA800);
+  static const Color primary = colorPrimary;
+  static const Color primarySoft = colorPrimaryLight;
+  static const Color primaryDark = colorPrimaryDark;
 
-  static const Color accent = Color(0xFFFF9800); // Orange (upgrade, alert)
+  static const Color accent = Color(0xFFFF9800); // Alerts / upgrade
+
+
+
+  static const Color darkBgSoft = Color(0xFF0B1120);
+  static const Color darkSurfaceSoft = Color(0xFF111827);
+  static const Color darkCardSoft = Color(0xFF172033);
+  static const Color darkBorderSoft = Color(0xFF263244);
+  static const Color textMutedSoft = Color(0xFF94A3B8);
+  static const Color mintAccent = Color(0xFF6EE7B7);
+  static const Color mintAccentDark = Color(0xFF06281C);
+
+
 
   // ---------------------------------------------------------------------------
-  // NEUTRAL COLORS (White / Black / Gray)
+  // NEUTRAL COLORS
   // ---------------------------------------------------------------------------
   static const Color white = Color(0xFFFFFFFF);
   static const Color offWhite = Color(0xFFF2F2F2);
-
   static const Color black = Color(0xFF000000);
 
   static const Color gray100 = Color(0xFFF5F5F5);
@@ -34,13 +46,13 @@ abstract class AppColors {
   // ---------------------------------------------------------------------------
   // BACKGROUND & SURFACE
   // ---------------------------------------------------------------------------
-  static const Color backgroundDark = Color(0xFF1E1E1E);
+  static const Color backgroundDark = Color(0xFF1A1A1A); // improved contrast
   static const Color backgroundLight = offWhite;
 
-  static const Color surfaceDark = Color(0xFF2A2A2A);
+  static const Color surfaceDark = Color(0xFF242424); // smoother than 2A2A2A
   static const Color surfaceLight = white;
 
-  static const Color cardDark = Color(0xFF2F2F2F);
+  static const Color cardDark = Color(0xFF2D2D2D);
   static const Color cardLight = white;
 
   // ---------------------------------------------------------------------------
@@ -64,74 +76,61 @@ abstract class AppColors {
   // ---------------------------------------------------------------------------
   // BORDER / DIVIDER
   // ---------------------------------------------------------------------------
-  static const Color borderDark = gray800;
+  static const Color borderDark = Color(0xFF383838); // improved visibility
   static const Color borderLight = gray300;
 
   static const Color dividerDark = gray700;
   static const Color dividerLight = gray300;
 
   // ---------------------------------------------------------------------------
-  // SWITCH / TOGGLE
+  // SWITCH / TOGGLE (Cleaned + unified)
   // ---------------------------------------------------------------------------
-  //static const Color switchOn = primary;
-  static const Color switchOffDark = gray700;
-  static const Color switchOffLight = gray400;
+  static const Color switchOn = Color(0xFF4CAF50);
+  static const Color switchOff = Color(0xFFE53935);
 
   static const Color switchThumbOn = white;
-  static const Color switchThumbOffDark = gray300;
-  static const Color switchThumbOffLight = white;
-  // ---------------------------------------------------------------------------
-// SWITCH / TOGGLE
-// ---------------------------------------------------------------------------
-
-// Track
-  static const Color switchOn = Color(0xFF4CAF50);   // Green (ON)
-  static const Color switchOff = Color(0xFFE53935);  // Red (OFF)
-
-// Thumb
-  //static const Color switchThumbOn = white;
   static const Color switchThumbOff = white;
 
-// Disabled
   static const Color switchDisabled = gray600;
 
-
-
-// SLIDER COLORS
-// ---------------------------------------------------------------------------
-
-// Default (Brightness / Level)
+  // ---------------------------------------------------------------------------
+  // SLIDER COLORS
+  // ---------------------------------------------------------------------------
   static const Color sliderActive = primary;
   static const Color sliderInactiveDark = gray700;
   static const Color sliderInactiveLight = gray300;
 
-// Power / Intensity
   static const Color sliderPowerActive = green;
   static const Color sliderPowerInactive = gray600;
 
-// Temperature
   static const Color sliderTempCold = blueLight;
-  static const Color sliderTempNormal = Color(0xFF00BCD4); // Cyan
+  static const Color sliderTempNormal = Color(0xFF00BCD4);
   static const Color sliderTempHot = red;
 
-// Audio / Signal
   static const Color sliderSignalLow = yellow;
   static const Color sliderSignalHigh = green;
 
-// Disabled
   static const Color sliderDisabled = gray500;
 
+  // ---------------------------------------------------------------------------
+  // SEMANTIC COLORS (STATUS)
+  // ---------------------------------------------------------------------------
+  static const Color success = Color(0xFF4CAF50);
+  static const Color warning = Color(0xFFFFC107);
+  static const Color error = Color(0xFFF44336);
+  static const Color info = Color(0xFF2196F3);
 
   // ---------------------------------------------------------------------------
-  // SEMANTIC COLORS (Status)
+  // IOT DEVICE STATES (NEW - IMPORTANT)
   // ---------------------------------------------------------------------------
-  static const Color success = Color(0xFF4CAF50); // Green
-  static const Color warning = Color(0xFFFFC107); // Yellow
-  static const Color error = Color(0xFFF44336);   // Red
-  static const Color info = Color(0xFF2196F3);    // Blue
+  static const Color deviceOnline = Color(0xFF22C55E);
+  static const Color deviceOffline = gray500;
+  static const Color motorRunning = Color(0xFF00E676);
+  static const Color motorStopped = gray500;
+  static const Color fault = Color(0xFFFF3B30);
 
   // ---------------------------------------------------------------------------
-  // UTILITY COLORS (Direct usage)
+  // UTILITY COLORS
   // ---------------------------------------------------------------------------
   static const Color red = Color(0xFFE53935);
   static const Color green = Color(0xFF43A047);
@@ -139,11 +138,36 @@ abstract class AppColors {
   static const Color purple = Color(0xFF8E24AA);
 
   // ---------------------------------------------------------------------------
-  // BLUE SHADES (Charts, Gauges, Info)
+  // BLUE SHADES (Charts / telemetry)
   // ---------------------------------------------------------------------------
   static const Color blueLight = Color(0xFF64B5F6);
   static const Color blue = Color(0xFF1E88E5);
   static const Color blueDark = Color(0xFF0D47A1);
+  // ---------------------------------------------------------------------------
+// AABNEX BRAND COLORS
+// ---------------------------------------------------------------------------
+
+  static const Color colorPrimary = Color(0xFF1565C0);
+  static const Color colorPrimaryDark = Color(0xFF0D47A1);
+  static const Color colorPrimaryLight = Color(0xFF42A5F5);
+
+  static const Color colorElectricBlue = Color(0xFF2979FF);
+  static const Color colorLedBlue = Color(0xFF00B0FF);
+
+  static const Color colorDeviceBlack = Color(0xFF111827);
+  static const Color colorDeviceDark = Color(0xFF172033);
+
+  static const Color colorDeviceWhite = Color(0xFFFFFFFF);
+  static const Color colorDeviceGray = Color(0xFFE5E7EB);
+
+  static const Color colorSignalOnline = Color(0xFF22C55E);
+  static const Color colorSignalOffline = Color(0xFF9CA3AF);
+
+  static const Color colorDanger = Color(0xFFE53935);
+  static const Color colorWarning = Color(0xFFFFB300);
+
+  static const Color colorSplashTop = Color(0xFF1976D2);
+  static const Color colorSplashBottom = Color(0xFF0D47A1);
 
   // ---------------------------------------------------------------------------
   // STATES

@@ -5,12 +5,12 @@ class FaultHelper {
       1: "Output phase fault",
       2: "Output abnormality",
       3: "Output phase imbalance",
-      4: "Acceleration Overcurrent",
-      5: "Deceleration Overcurrent",
-      6: "Constant Speed Overcurrent",
-      7: "Acceleration Overvoltage",
-      8: "Deceleration Overvoltage",
-      9: "Constant Overvoltage",
+      4: "Acceleration Over current",
+      5: "Deceleration Over current",
+      6: "Constant Speed Over current",
+      7: "Acceleration Over voltage",
+      8: "Deceleration Over voltage",
+      9: "Constant Over voltage",
       10: "Under Voltage",
       11: "Motor Overload",
       12: "Drive Overload",
@@ -21,7 +21,6 @@ class FaultHelper {
       17: "External Fault",
       18: "Communication Error",
     };
-
     return faults[code] ?? "Unknown Fault";
   }
 }

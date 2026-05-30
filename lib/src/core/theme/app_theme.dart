@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:smart_iot_app/src/core/contants/app_color.dart';
+import 'package:smart_iot_app/src/core/constant/app_color.dart';
+
 
 
 class AppTheme {
@@ -9,10 +10,11 @@ class AppTheme {
   static ThemeData light() {
     return ThemeData(
       brightness: Brightness.light,
+
       scaffoldBackgroundColor: AppColors.backgroundLight,
       primaryColor: AppColors.primary,
 
-      colorScheme: const ColorScheme.light(
+      colorScheme: ColorScheme.light(
         primary: AppColors.primary,
         secondary: AppColors.accent,
         error: AppColors.red,

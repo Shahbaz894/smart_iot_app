@@ -1,12 +1,13 @@
 
 import 'package:flutter/material.dart';
-import 'package:smart_iot_app/src/core/contants/app_color.dart';
+
 
 import 'package:intl/intl.dart';
 
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:smart_iot_app/src/core/contants/app_color.dart';
+import 'package:smart_iot_app/src/core/constant/app_color.dart';
+
 import '../provider/motor_on_off_provider.dart';
 
 class MotorButton extends ConsumerStatefulWidget {
