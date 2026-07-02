@@ -8,48 +8,9 @@ enum MotorCommandStatus {
   unknown,
 }
 
-extension MotorCommandStatusX on MotorCommandStatus {
-  String get value {
-    switch (this) {
-      case MotorCommandStatus.on:
-        return "on";
-      case MotorCommandStatus.off:
-        return "off";
-      case MotorCommandStatus.unknown:
-        return "unknown";
-    }
-  }
-
-  static MotorCommandStatus fromValue(dynamic value) {
-    final text = value?.toString().trim().toLowerCase();
-
-    if (text == "on" ||
-        text == "running" ||
-        text == "true" ||
-        text == "1") {
-      return MotorCommandStatus.on;
-    }
-
-    if (text == "off" ||
-        text == "stopped" ||
-        text == "false" ||
-        text == "0") {
-      return MotorCommandStatus.off;
-    }
-
-    return MotorCommandStatus.unknown;
-  }
-}
-
 class MotorState {
-  /// Used only when user manually taps ON/OFF button.
-  /// This can show loader on MotorButton.
   final bool isLoading;
-
-  /// Used only for background database sync.
-  /// This must NOT show any loader on UI.
   final bool isSyncing;
-
   final String? error;
   final String? message;
   final MotorLogResponse? motorLog;
@@ -65,16 +26,7 @@ class MotorState {
   });
 
   bool get isMotorOn => commandStatus == MotorCommandStatus.on;
-
   bool get isMotorOff => commandStatus == MotorCommandStatus.off;
-
-  bool get isMotorStatusKnown => commandStatus != MotorCommandStatus.unknown;
-
-  /// Use this only for button loader.
-  bool get showButtonLoader => isLoading;
-
-  /// Never use isSyncing for MotorButton loading.
-  bool get isBackgroundSyncing => isSyncing;
 
   MotorState copyWith({
     bool? isLoading,

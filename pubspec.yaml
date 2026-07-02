@@ -54,8 +54,6 @@ dependencies:
   printing: ^5.14.3
   share_plus: ^10.1.4
   path_provider: ^2.1.5
-  mqtt_client: ^10.3.0
-  web_socket_channel: ^3.0.3
 
 
 dev_dependencies:

@@ -67,7 +67,7 @@ class ProfessionalDrawer extends ConsumerWidget {
 
     return Drawer(
       width: size.width * 0.80,
-      backgroundColor: AppColors.darkBgSoft,
+      backgroundColor: const Color(0xFF0F172A),
       child: SafeArea(
         child: Column(
           children: [
@@ -355,6 +355,69 @@ class ProfessionalDrawer extends ConsumerWidget {
                       );
                     },
                   ),
+                  // Consumer(
+                  //   builder: (context, ref, child) {
+                  //     final themeMode = ref.watch(themeProvider);
+                  //     final isDark = themeMode == ThemeMode.dark;
+                  //
+                  //     return Padding(
+                  //       padding: const EdgeInsets.symmetric(
+                  //         horizontal: 10,
+                  //         vertical: 4,
+                  //       ),
+                  //       child: Container(
+                  //         padding: const EdgeInsets.symmetric(
+                  //           horizontal: 14,
+                  //           vertical: 10,
+                  //         ),
+                  //         decoration: BoxDecoration(
+                  //           color: Colors.white.withOpacity(0.04),
+                  //           borderRadius: BorderRadius.circular(14),
+                  //           border: Border.all(
+                  //             color: Colors.white.withOpacity(0.06),
+                  //           ),
+                  //         ),
+                  //         child: Row(
+                  //           children: [
+                  //
+                  //             Icon(
+                  //               isDark
+                  //                   ? Icons.dark_mode_rounded
+                  //                   : Icons.light_mode_rounded,
+                  //               color: AppColors.primary,
+                  //               size: 22,
+                  //             ),
+                  //
+                  //             const SizedBox(width: 18),
+                  //
+                  //             const Expanded(
+                  //               child: Text(
+                  //                 "Dark Mode",
+                  //                 style: TextStyle(
+                  //                   color: Colors.white,
+                  //                   fontSize: 14,
+                  //                   fontWeight: FontWeight.w600,
+                  //                 ),
+                  //               ),
+                  //             ),
+                  //
+                  //             Switch(
+                  //               value: isDark,
+                  //               activeColor: AppColors.primary,
+                  //               onChanged: (value) {
+                  //                 ref
+                  //                     .read(themeProvider.notifier)
+                  //                     .state = value
+                  //                     ? ThemeMode.dark
+                  //                     : ThemeMode.light;
+                  //               },
+                  //             ),
+                  //           ],
+                  //         ),
+                  //       ),
+                  //     );
+                  //   },
+                  // ),
 
                   _drawerTile(
                     context,
@@ -388,7 +451,7 @@ class ProfessionalDrawer extends ConsumerWidget {
                     child: Column(
                       children: [
                         Text(
-                          "AabNex Iot",
+                          "SMART WELL",
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.5),
                             fontSize: 11,

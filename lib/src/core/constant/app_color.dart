@@ -15,7 +15,7 @@ abstract class AppColors {
   static const Color accent = Color(0xFFFF9800); // Alerts / upgrade
 
 
-  // static const Color darkBgSoft = Color(0xFF0F91D0);
+
   static const Color darkBgSoft = Color(0xFF0B1120);
   static const Color darkSurfaceSoft = Color(0xFF111827);
   static const Color darkCardSoft = Color(0xFF172033);

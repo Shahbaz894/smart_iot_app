@@ -5,7 +5,76 @@ import "../../../../core/error/app_exception.dart";
 import "../../../../core/network/api_client.dart";
 import "../../../motor/data/models/motor_log_response.dart";
 
-
+// class MotorLogApiService {
+//   final ApiClient apiClient;
+//
+//   MotorLogApiService(this.apiClient);
+//
+//   Future<List<MotorLogResponse>> getLogs({
+//     required String deviceId,
+//   }) async {
+//     try {
+//       final response = await apiClient.dio.get(
+//         ApiEndpoints.motorLogs(deviceId),
+//       );
+//
+//       final data = response.data;
+//
+//       if (data is List) {
+//         return data
+//             .whereType<Map>()
+//             .map(
+//               (item) => MotorLogResponse.fromJson(
+//             Map<String, dynamic>.from(item),
+//           ),
+//         )
+//             .toList();
+//       }
+//
+//       throw AppException(message: "Invalid motor logs response");
+//     } on DioException catch (e) {
+//       throw apiClient.handleError(e);
+//     } on AppException {
+//       rethrow;
+//     } catch (e) {
+//       throw AppException(
+//         message: "Failed to load motor logs: ${e.toString()}",
+//       );
+//     }
+//   }
+//
+//   Future<void> deleteLog({
+//     required String logId,
+//   }) async {
+//     try {
+//       await apiClient.dio.delete(
+//         ApiEndpoints.deleteMotorLog(logId),
+//       );
+//     } on DioException catch (e) {
+//       throw apiClient.handleError(e);
+//     } catch (e) {
+//       throw AppException(
+//         message: "Failed to delete motor log: ${e.toString()}",
+//       );
+//     }
+//   }
+//
+//   Future<void> clearLogs({
+//     required String deviceId,
+//   }) async {
+//     try {
+//       await apiClient.dio.delete(
+//         ApiEndpoints.clearMotorLogs(deviceId),
+//       );
+//     } on DioException catch (e) {
+//       throw apiClient.handleError(e);
+//     } catch (e) {
+//       throw AppException(
+//         message: "Failed to clear motor logs: ${e.toString()}",
+//       );
+//     }
+//   }
+// }
 class MotorLogApiService {
   final ApiClient apiClient;
 

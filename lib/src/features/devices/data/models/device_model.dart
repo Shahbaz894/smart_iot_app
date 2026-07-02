@@ -1,5 +1,3 @@
-import 'dart:core';
-
 class DeviceModel {
   final String id;
   final String userId;
@@ -7,8 +5,6 @@ class DeviceModel {
   final String name;
   final String location;
   final bool isOnline;
-  /// ⏳ IoT Failsafe Heartbeat parameter added
-  final DateTime? updatedAt;
 
   const DeviceModel({
     required this.id,
@@ -17,7 +13,6 @@ class DeviceModel {
     required this.name,
     required this.location,
     required this.isOnline,
-    this.updatedAt,
   });
 
   String get primaryDeviceId {
@@ -48,23 +43,6 @@ class DeviceModel {
             (rawOnline is String && rawOnline.toLowerCase() == "true") ||
             (rawOnline is String && rawOnline == "1");
 
-    // Safely parse timestamp from multiple backend variants
-    DateTime? parsedTime;
-    final rawTime = json["updated_at"] ?? json["created_at"] ?? json["timestamp"];
-    if (rawTime != null) {
-      if (rawTime is int) {
-        // Agar epoch timestamp (seconds/milliseconds) aa raha ho
-        parsedTime = DateTime.fromMillisecondsSinceEpoch(
-          rawTime < 9999999999 ? rawTime * 1000 : rawTime,
-        );
-      } else {
-        parsedTime = DateTime.tryParse(rawTime.toString());
-      }
-    } else {
-      // Failsafe: Agar backend se time na aaye, to app ka current runtime time record ho jaye
-      parsedTime = DateTime.now();
-    }
-
     return DeviceModel(
       id: (json["id"] ?? "").toString(),
       userId: (json["user_id"] ?? "").toString(),
@@ -78,7 +56,6 @@ class DeviceModel {
           .toString(),
       location: (json["location"] ?? "").toString(),
       isOnline: isOnlineValue,
-      updatedAt: parsedTime,
     );
   }
 
@@ -90,28 +67,6 @@ class DeviceModel {
       "device_name": name,
       "location": location,
       "is_online": isOnline,
-      "updated_at": updatedAt?.toIso8601String(),
     };
-  }
-
-  /// Helper method to safely duplicate states in riverpod/bloc providers
-  DeviceModel copyWith({
-    String? id,
-    String? userId,
-    String? deviceUid,
-    String? name,
-    String? location,
-    bool? isOnline,
-    DateTime? updatedAt,
-  }) {
-    return DeviceModel(
-      id: id ?? this.id,
-      userId: userId ?? this.userId,
-      deviceUid: deviceUid ?? this.deviceUid,
-      name: name ?? this.name,
-      location: location ?? this.location,
-      isOnline: isOnline ?? this.isOnline,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
   }
 }

@@ -1085,12 +1085,10 @@ class _TelemetryScreenState extends ConsumerState<TelemetryScreen> {
 
   String get safeDeviceId => widget.deviceId?.trim() ?? "";
 
-
   bool get hasDevice {
     final id = safeDeviceId;
     return id.isNotEmpty;
   }
-
 
   @override
   void initState() {
@@ -1247,10 +1245,7 @@ class _TelemetryScreenState extends ConsumerState<TelemetryScreen> {
     );
 
     final status = connectionStatus(latest);
-    print('meri ye device id hai');
-    print(latest);
-    print(safeDeviceId);
-    print(widget.deviceId);
+
     final width = MediaQuery.of(context).size.width;
     final isSmall = width < 380;
     final isTablet = width >= 650;
