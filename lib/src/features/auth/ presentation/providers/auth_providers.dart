@@ -1,5 +1,6 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/legacy.dart";
+import "package:smart_iot_app/src/core/constant/api_endpoints.dart";
 import "package:smart_iot_app/src/core/constant/storage/auth_storage.dart";
 import "package:smart_iot_app/src/features/devices/presentation/state/device_state.dart";
 import "package:smart_iot_app/src/features/devices/presentation/viewmodels/device_viewmodel.dart";
@@ -27,12 +28,22 @@ final authStorageProvider = Provider<AuthStorage>((ref) {
   return AuthStorage();
 });
 
-final apiClientProvider = Provider<ApiClient>((ref) {
-  return ApiClient(
-    authStorage: ref.read(authStorageProvider),
-  );
-});
+// final apiClientProvider = Provider<ApiClient>((ref) {
+//   return ApiClient(
+//     authStorage: ref.read(authStorageProvider),
+//
+//   );
+// });
 
+final apiClientProvider = Provider<ApiClient>((ref) {
+  final storage = ref.read(authStorageProvider);
+  final client = ApiClient(authStorage: storage);
+
+  // ⚡ FIX: Constructor ke bahar humne yahan interceptor inject kar diya!
+  client.dio.interceptors.add(AuthInterceptor(storage));
+
+  return client;
+});
 final authApiServiceProvider = Provider<AuthApiService>((ref) {
   return AuthApiService(
     ref.read(apiClientProvider),

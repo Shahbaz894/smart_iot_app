@@ -18,6 +18,8 @@ class TelemetryApiService {
   /// Important:
   /// ESP32 should normally send telemetry using MQTT.
   /// Keep this method for testing, fallback, or manual upload only.
+  ///
+
   Future<TelemetryModel> sendTelemetry({
     required String deviceId,
     required Map<String, dynamic> data,
@@ -59,6 +61,8 @@ class TelemetryApiService {
       );
 
       final data = response.data;
+      print('ye data aa raha telementary main');
+      print(data.toString());
 
       print("LATEST TELEMETRY DEVICE: $deviceId");
       print("LATEST TELEMETRY RAW: $data");

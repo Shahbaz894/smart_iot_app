@@ -14,59 +14,66 @@ class KhataViewModel extends StateNotifier<KhataState> {
     required this.khataRepository,
   }) : super(const KhataState());
 
+  // Future<void> loadEntries() async {
+  //   try {
+  //     state = state.copyWith(
+  //       isLoading: true,
+  //       error: null,
+  //       message: null,
+  //     );
+  //
+  //     final entries = await khataRepository.getEntries();
+  //
+  //     state = state.copyWith(
+  //       isLoading: false,
+  //       entries: entries,
+  //     );
+  //   } on AppException catch (e) {
+  //     state = state.copyWith(
+  //       isLoading: false,
+  //       error: e.message,
+  //     );
+  //   } catch (e) {
+  //     state = state.copyWith(
+  //       isLoading: false,
+  //       error: "Failed to load Khata: ${e.toString()}",
+  //     );
+  //   }
+  // }
   Future<void> loadEntries() async {
-    try {
-      state = state.copyWith(
-        isLoading: true,
-        error: null,
-        message: null,
-      );
 
       final entries = await khataRepository.getEntries();
 
+      print("KHATA COUNT = ${entries.length}");
+
+      for (final e in entries) {
+        print(
+          "KHATA => ${e.customerName} | ${e.deviceId}",
+        );
+      }
+
       state = state.copyWith(
-        isLoading: false,
         entries: entries,
       );
-    } on AppException catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: e.message,
-      );
-    } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: "Failed to load Khata: ${e.toString()}",
-      );
     }
-  }
 
+// Now using repository exclusively
   Future<void> createEntry(KhataEntryModel entry) async {
     try {
-      state = state.copyWith(
-        isLoading: true,
-        error: null,
-        message: null,
-      );
+      state = state.copyWith(isLoading: true, error: null);
 
+      // View Model talks to Repository ONLY
       final created = await khataRepository.createEntry(entry: entry);
-      final updatedList = [created, ...state.entries];
 
       state = state.copyWith(
         isLoading: false,
-        entries: updatedList,
+        entries: [created, ...state.entries],
         message: "Khata entry created",
       );
     } on AppException catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: e.message,
-      );
+      state = state.copyWith(isLoading: false, error: e.message);
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: "Failed to create Khata entry: ${e.toString()}",
-      );
+      state = state.copyWith(isLoading: false, error: "Failed: ${e.toString()}");
     }
   }
 
@@ -79,12 +86,9 @@ class KhataViewModel extends StateNotifier<KhataState> {
     int fallbackRunSeconds = 0,
   }) async {
     try {
-      state = state.copyWith(
-        isLoading: true,
-        error: null,
-        message: null,
-      );
+      state = state.copyWith(isLoading: true, error: null);
 
+      // View Model talks to Repository ONLY
       final created = await khataRepository.createFromMotorLog(
         log: log,
         customerName: customerName,
@@ -94,23 +98,67 @@ class KhataViewModel extends StateNotifier<KhataState> {
         fallbackRunSeconds: fallbackRunSeconds,
       );
 
-      final updatedList = [created, ...state.entries];
-
       state = state.copyWith(
         isLoading: false,
-        entries: updatedList,
+        entries: [created, ...state.entries],
         message: "Khata entry created from motor run",
       );
     } on AppException catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: e.message,
-      );
+      state = state.copyWith(isLoading: false, error: e.message);
     } catch (e) {
+      state = state.copyWith(isLoading: false, error: "Repository error: ${e.toString()}");
+    }
+  }
+
+  Future<KhataEntryModel?> startMotorKhataSession({
+    required String customerName,
+    required String deviceId,
+    required String motorLogId,
+    required DateTime startTime,
+  }) async {
+    try {
+      state = state.copyWith(isLoading: true, error: null);
+
+      // View Model talks to Repository ONLY
+      final created = await khataRepository.startMotorKhataSession(
+        customerName: customerName,
+        deviceId: deviceId,
+        motorLogId: motorLogId,
+        startTime: startTime,
+      );
+
       state = state.copyWith(
         isLoading: false,
-        error: "Failed to create Khata from motor log: ${e.toString()}",
+        entries: [created, ...state.entries],
       );
+      return created;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      return null;
+    }
+  }
+
+  Future<KhataEntryModel?> closeMotorKhataSession({
+    required KhataEntryModel entry,
+    required DateTime endTime,
+  }) async {
+    try {
+      state = state.copyWith(isLoading: true, error: null);
+
+      // View Model talks to Repository ONLY
+      final saved = await khataRepository.closeMotorKhataSession(
+        entry: entry,
+        endTime: endTime,
+      );
+
+      state = state.copyWith(
+        isLoading: false,
+        entries: state.entries.map((item) => item.id == saved.id ? saved : item).toList(),
+      );
+      return saved;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      return null;
     }
   }
 
@@ -399,93 +447,93 @@ class KhataViewModel extends StateNotifier<KhataState> {
       );
     }
   }
-  Future<KhataEntryModel?> startMotorKhataSession({
-    required String customerName,
-    required String deviceId,
-    required String motorLogId,
-    required DateTime startTime,
-  }) async {
-    try {
-      state = state.copyWith(
-        isLoading: true,
-        error: null,
-        message: null,
-      );
-
-      final created =
-      await khataRepository.startMotorKhataSession(
-        customerName: customerName,
-        deviceId: deviceId,
-        motorLogId: motorLogId,
-        startTime: startTime,
-      );
-
-      final updatedList = [created, ...state.entries];
-
-      state = state.copyWith(
-        isLoading: false,
-        entries: updatedList,
-        message: "Khata session started",
-      );
-
-      return created;
-    } on AppException catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: e.message,
-      );
-      return null;
-    } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: "Failed to start Khata session: ${e.toString()}",
-      );
-      return null;
-    }
-  }
-
-  Future<KhataEntryModel?> closeMotorKhataSession({
-    required KhataEntryModel entry,
-    required DateTime endTime,
-  }) async {
-    try {
-      state = state.copyWith(
-        isLoading: true,
-        error: null,
-        message: null,
-      );
-
-      final saved =
-      await khataRepository.closeMotorKhataSession(
-        entry: entry,
-        endTime: endTime,
-      );
-
-      final updatedEntries = state.entries.map((item) {
-        return item.id == saved.id ? saved : item;
-      }).toList();
-
-      state = state.copyWith(
-        isLoading: false,
-        entries: updatedEntries,
-        message: "Khata session closed",
-      );
-
-      return saved;
-    } on AppException catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: e.message,
-      );
-      return null;
-    } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: "Failed to close Khata session: ${e.toString()}",
-      );
-      return null;
-    }
-  }
+  // Future<KhataEntryModel?> startMotorKhataSession({
+  //   required String customerName,
+  //   required String deviceId,
+  //   required String motorLogId,
+  //   required DateTime startTime,
+  // }) async {
+  //   try {
+  //     state = state.copyWith(
+  //       isLoading: true,
+  //       error: null,
+  //       message: null,
+  //     );
+  //
+  //     final created =
+  //     await khataRepository.startMotorKhataSession(
+  //       customerName: customerName,
+  //       deviceId: deviceId,
+  //       motorLogId: motorLogId,
+  //       startTime: startTime,
+  //     );
+  //
+  //     final updatedList = [created, ...state.entries];
+  //
+  //     state = state.copyWith(
+  //       isLoading: false,
+  //       entries: updatedList,
+  //       message: "Khata session started",
+  //     );
+  //
+  //     return created;
+  //   } on AppException catch (e) {
+  //     state = state.copyWith(
+  //       isLoading: false,
+  //       error: e.message,
+  //     );
+  //     return null;
+  //   } catch (e) {
+  //     state = state.copyWith(
+  //       isLoading: false,
+  //       error: "Failed to start Khata session: ${e.toString()}",
+  //     );
+  //     return null;
+  //   }
+  // }
+  //
+  // Future<KhataEntryModel?> closeMotorKhataSession({
+  //   required KhataEntryModel entry,
+  //   required DateTime endTime,
+  // }) async {
+  //   try {
+  //     state = state.copyWith(
+  //       isLoading: true,
+  //       error: null,
+  //       message: null,
+  //     );
+  //
+  //     final saved =
+  //     await khataRepository.closeMotorKhataSession(
+  //       entry: entry,
+  //       endTime: endTime,
+  //     );
+  //
+  //     final updatedEntries = state.entries.map((item) {
+  //       return item.id == saved.id ? saved : item;
+  //     }).toList();
+  //
+  //     state = state.copyWith(
+  //       isLoading: false,
+  //       entries: updatedEntries,
+  //       message: "Khata session closed",
+  //     );
+  //
+  //     return saved;
+  //   } on AppException catch (e) {
+  //     state = state.copyWith(
+  //       isLoading: false,
+  //       error: e.message,
+  //     );
+  //     return null;
+  //   } catch (e) {
+  //     state = state.copyWith(
+  //       isLoading: false,
+  //       error: "Failed to close Khata session: ${e.toString()}",
+  //     );
+  //     return null;
+  //   }
+  // }
 
   String _paymentStatus({
     required double cashReceived,

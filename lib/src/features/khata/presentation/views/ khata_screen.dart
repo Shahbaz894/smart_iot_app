@@ -37,9 +37,25 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
   @override
   void initState() {
     super.initState();
+
     Future.microtask(() {
       ref.read(khataViewModelProvider.notifier).loadEntries();
     });
+
+    ref.listenManual<KhataState>(
+      khataViewModelProvider,
+          (previous, next) {
+        if (next.error != null &&
+            previous?.error != next.error) {
+          _showSnack(next.error!, true, seconds: 12);
+        }
+
+        if (next.message != null &&
+            previous?.message != next.message) {
+          _showSnack(next.message!, false);
+        }
+      },
+    );
   }
 
   @override
@@ -102,116 +118,156 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
     );
   }
 
-  Future<void> _showPriceSheet(KhataEntryModel entry) async {
-    final priceController = TextEditingController(
-      text: entry.pricePerHour > 0 ? entry.pricePerHour.toString() : "",
-    );
+  // // Future<void> _showPriceSheet(KhataEntryModel entry) async {
+  // //   final priceController = TextEditingController(
+  // //     text: entry.pricePerHour > 0 ? entry.pricePerHour.toString() : "",
+  // //   );
+  // //
+  // //   final cashController = TextEditingController(
+  // //     text: entry.cashReceived > 0 ? entry.cashReceived.toString() : "0",
+  // //   );
+  // //
+  // //   final result = await showModalBottomSheet<_BillInput>(
+  // //     context: context,
+  // //     isScrollControlled: true,
+  // //     backgroundColor: Colors.transparent,
+  // //     builder: (context) {
+  // //       final bottom = MediaQuery.of(context).viewInsets.bottom;
+  // //
+  // //       return _KhataBottomSheet(
+  // //         bottom: bottom,
+  // //         title: "Calculate Bill",
+  // //         subtitle: "Run hours: ${entry.runHours.toStringAsFixed(2)}",
+  // //         children: [
+  // //           _SheetField(
+  // //             controller: priceController,
+  // //             label: "Price per hour",
+  // //             icon: Icons.price_change_outlined,
+  // //             keyboardType: TextInputType.number,
+  // //           ),
+  // //           const SizedBox(height: 12),
+  // //           _SheetField(
+  // //             controller: cashController,
+  // //             label: "Cash received",
+  // //             icon: Icons.payments_outlined,
+  // //             keyboardType: TextInputType.number,
+  // //           ),
+  // //           const SizedBox(height: 16),
+  // //           _PrimarySheetButton(
+  // //             icon: Icons.calculate_rounded,
+  // //             label: "Calculate Bill",
+  // //             onPressed: () {
+  // //               final price = double.tryParse(priceController.text.trim()) ?? 0;
+  // //               final cash = double.tryParse(cashController.text.trim()) ?? 0;
+  // //
+  // //               Navigator.pop(
+  // //                 context,
+  // //                 _BillInput(
+  // //                   pricePerHour: price,
+  // //                   cashReceived: cash,
+  // //                 ),
+  // //               );
+  // //             },
+  // //           ),
+  // //         ],
+  // //       );
+  // //     },
+  // //   );
+  // //
+  // //   priceController.dispose();
+  // //   cashController.dispose();
+  // //
+  // //   if (result == null) return;
+  // //
+  // //   await ref.read(khataViewModelProvider.notifier).updatePriceAndBill(
+  // //     entry: entry,
+  // //     pricePerHour: result.pricePerHour,
+  // //     cashReceived: result.cashReceived,
+  // //   );
+  // // }
+  // Future<void> _showPriceSheet(
+  //     KhataEntryModel entry,
+  //     ) async {
+  //   final result = await showModalBottomSheet<_BillInput>(
+  //     context: context,
+  //     isScrollControlled: true,
+  //     backgroundColor: Colors.transparent,
+  //     builder: (_) => CalculateBillSheet(entry: entry),
+  //   );
+  //
+  //   if (result == null) return;
+  //
+  //   await ref
+  //       .read(khataViewModelProvider.notifier)
+  //       .updatePriceAndBill(
+  //     entry: entry,
+  //     pricePerHour: result.pricePerHour,
+  //     cashReceived: result.cashReceived,
+  //   );
+  // }
 
-    final cashController = TextEditingController(
-      text: entry.cashReceived > 0 ? entry.cashReceived.toString() : "0",
-    );
-
-    final result = await showModalBottomSheet<_BillInput>(
+  // Future<void> _showPaymentSheet(KhataEntryModel entry) async {
+  //   final amountController = TextEditingController();
+  //
+  //   final amount = await showModalBottomSheet<double>(
+  //     context: context,
+  //     isScrollControlled: true,
+  //     backgroundColor: Colors.transparent,
+  //     builder: (context) {
+  //       final bottom = MediaQuery.of(context).viewInsets.bottom;
+  //
+  //       return _KhataBottomSheet(
+  //         bottom: bottom,
+  //         title: "Add Payment",
+  //         subtitle: entry.customerName,
+  //         children: [
+  //           _SheetField(
+  //             controller: amountController,
+  //             label: "Amount received",
+  //             icon: Icons.payments_outlined,
+  //             keyboardType: TextInputType.number,
+  //           ),
+  //           const SizedBox(height: 16),
+  //           _PrimarySheetButton(
+  //             icon: Icons.check_rounded,
+  //             label: "Save Payment",
+  //             color: AppColors.green,
+  //             foregroundColor: AppColors.white,
+  //             onPressed: () {
+  //               final value = double.tryParse(amountController.text.trim()) ?? 0;
+  //               Navigator.pop(context, value);
+  //             },
+  //           ),
+  //         ],
+  //       );
+  //     },
+  //   );
+  //
+  //   amountController.dispose();
+  //
+  //   if (amount == null) return;
+  //
+  //   await ref.read(khataViewModelProvider.notifier).addPayment(
+  //     entry: entry,
+  //     amount: amount,
+  //   );
+  // }
+  Future<void> _showPaymentSheet(
+      KhataEntryModel entry,
+      ) async {
+    final amount =
+    await showModalBottomSheet<double>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) {
-        final bottom = MediaQuery.of(context).viewInsets.bottom;
-
-        return _KhataBottomSheet(
-          bottom: bottom,
-          title: "Calculate Bill",
-          subtitle: "Run hours: ${entry.runHours.toStringAsFixed(2)}",
-          children: [
-            _SheetField(
-              controller: priceController,
-              label: "Price per hour",
-              icon: Icons.price_change_outlined,
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 12),
-            _SheetField(
-              controller: cashController,
-              label: "Cash received",
-              icon: Icons.payments_outlined,
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 16),
-            _PrimarySheetButton(
-              icon: Icons.calculate_rounded,
-              label: "Calculate Bill",
-              onPressed: () {
-                final price = double.tryParse(priceController.text.trim()) ?? 0;
-                final cash = double.tryParse(cashController.text.trim()) ?? 0;
-
-                Navigator.pop(
-                  context,
-                  _BillInput(
-                    pricePerHour: price,
-                    cashReceived: cash,
-                  ),
-                );
-              },
-            ),
-          ],
-        );
-      },
+      builder: (_) => const PaymentSheet(),
     );
-
-    priceController.dispose();
-    cashController.dispose();
-
-    if (result == null) return;
-
-    await ref.read(khataViewModelProvider.notifier).updatePriceAndBill(
-      entry: entry,
-      pricePerHour: result.pricePerHour,
-      cashReceived: result.cashReceived,
-    );
-  }
-
-  Future<void> _showPaymentSheet(KhataEntryModel entry) async {
-    final amountController = TextEditingController();
-
-    final amount = await showModalBottomSheet<double>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        final bottom = MediaQuery.of(context).viewInsets.bottom;
-
-        return _KhataBottomSheet(
-          bottom: bottom,
-          title: "Add Payment",
-          subtitle: entry.customerName,
-          children: [
-            _SheetField(
-              controller: amountController,
-              label: "Amount received",
-              icon: Icons.payments_outlined,
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 16),
-            _PrimarySheetButton(
-              icon: Icons.check_rounded,
-              label: "Save Payment",
-              color: AppColors.green,
-              foregroundColor: AppColors.white,
-              onPressed: () {
-                final value = double.tryParse(amountController.text.trim()) ?? 0;
-                Navigator.pop(context, value);
-              },
-            ),
-          ],
-        );
-      },
-    );
-
-    amountController.dispose();
 
     if (amount == null) return;
 
-    await ref.read(khataViewModelProvider.notifier).addPayment(
+    await ref
+        .read(khataViewModelProvider.notifier)
+        .addPayment(
       entry: entry,
       amount: amount,
     );
@@ -371,18 +427,7 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<KhataState>(
-      khataViewModelProvider,
-          (previous, next) {
-        if (next.error != null && previous?.error != next.error) {
-          _showSnack(next.error!, true, seconds: 12);
-        }
 
-        if (next.message != null && previous?.message != next.message) {
-          _showSnack(next.message!, false);
-        }
-      },
-    );
 
     final state = ref.watch(khataViewModelProvider);
 
@@ -518,7 +563,7 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
                         else
                           _KhataList(
                             entries: entries,
-                            onSetPrice: _showPriceSheet,
+                           // onSetPrice: _showPriceSheet,
                             onPayment: _showPaymentSheet,
                             onEdit: _showEditSheet,
                             onDelete: _confirmDelete,
@@ -542,9 +587,145 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
   }
 }
 
+class PaymentSheet extends StatefulWidget {
+  const PaymentSheet({super.key});
+
+  @override
+  State<PaymentSheet> createState() => _PaymentSheetState();
+}
+
+class _PaymentSheetState extends State<PaymentSheet> {
+  late final TextEditingController amountController;
+
+  @override
+  void initState() {
+    super.initState();
+    amountController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    amountController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+
+    return _KhataBottomSheet(
+      bottom: bottom,
+      title: "Add Payment",
+      subtitle: "Enter payment amount",
+      children: [
+        _SheetField(
+          controller: amountController,
+          label: "Amount received",
+          icon: Icons.payments_outlined,
+          keyboardType: TextInputType.number,
+        ),
+        const SizedBox(height: 16),
+        _PrimarySheetButton(
+          icon: Icons.check_rounded,
+          label: "Save Payment",
+          onPressed: () {
+            Navigator.pop(
+              context,
+              double.tryParse(amountController.text) ?? 0,
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+// class CalculateBillSheet extends StatefulWidget {
+//   final KhataEntryModel entry;
+//
+//   const CalculateBillSheet({
+//     super.key,
+//     required this.entry,
+//   });
+//
+//   @override
+//   State<CalculateBillSheet> createState() => _CalculateBillSheetState();
+// }
+//
+// class _CalculateBillSheetState extends State<CalculateBillSheet> {
+//   late final TextEditingController priceController;
+//   late final TextEditingController cashController;
+//
+//   @override
+//   void initState() {
+//     super.initState();
+//
+//     priceController = TextEditingController(
+//       text: widget.entry.pricePerHour > 0
+//           ? widget.entry.pricePerHour.toString()
+//           : "",
+//     );
+//
+//     cashController = TextEditingController(
+//       text: widget.entry.cashReceived > 0
+//           ? widget.entry.cashReceived.toString()
+//           : "0",
+//     );
+//   }
+//
+//   @override
+//   void dispose() {
+//     priceController.dispose();
+//     cashController.dispose();
+//     super.dispose();
+//   }
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final bottom = MediaQuery.of(context).viewInsets.bottom;
+//
+//     return _KhataBottomSheet(
+//       bottom: bottom,
+//       title: "Calculate Bill",
+//       subtitle:
+//       "Run hours: ${widget.entry.runHours.toStringAsFixed(2)}",
+//       children: [
+//         _SheetField(
+//           controller: priceController,
+//           label: "Price per hour",
+//           icon: Icons.price_change_outlined,
+//           keyboardType: TextInputType.number,
+//         ),
+//         const SizedBox(height: 12),
+//         _SheetField(
+//           controller: cashController,
+//           label: "Cash received",
+//           icon: Icons.payments_outlined,
+//           keyboardType: TextInputType.number,
+//         ),
+//         const SizedBox(height: 16),
+//         _PrimarySheetButton(
+//           icon: Icons.calculate_rounded,
+//           label: "Calculate Bill",
+//           onPressed: () {
+//             Navigator.pop(
+//               context,
+//               _BillInput(
+//                 pricePerHour:
+//                 double.tryParse(priceController.text) ?? 0,
+//                 cashReceived:
+//                 double.tryParse(cashController.text) ?? 0,
+//               ),
+//             );
+//           },
+//         ),
+//       ],
+//     );
+//   }
+// }
+
 class _KhataList extends StatelessWidget {
   final List<KhataEntryModel> entries;
-  final ValueChanged<KhataEntryModel> onSetPrice;
   final ValueChanged<KhataEntryModel> onPayment;
   final ValueChanged<KhataEntryModel> onEdit;
   final ValueChanged<KhataEntryModel> onDelete;
@@ -553,7 +734,7 @@ class _KhataList extends StatelessWidget {
 
   const _KhataList({
     required this.entries,
-    required this.onSetPrice,
+
     required this.onPayment,
     required this.onEdit,
     required this.onDelete,
@@ -574,7 +755,7 @@ class _KhataList extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 14),
                 child: _KhataCard(
                   entry: entry,
-                  onSetPrice: () => onSetPrice(entry),
+                  //onSetPrice: () => onSetPrice(entry),
                   onPayment: () => onPayment(entry),
                   onEdit: () => onEdit(entry),
                   onDelete: () => onDelete(entry),
@@ -594,7 +775,7 @@ class _KhataList extends StatelessWidget {
               width: (constraints.maxWidth - 16) / 2,
               child: _KhataCard(
                 entry: entry,
-                onSetPrice: () => onSetPrice(entry),
+                //onSetPrice: () => onSetPrice(entry),
                 onPayment: () => onPayment(entry),
                 onEdit: () => onEdit(entry),
                 onDelete: () => onDelete(entry),
@@ -957,7 +1138,7 @@ class _SummaryCard extends StatelessWidget {
 
 class _KhataCard extends StatelessWidget {
   final KhataEntryModel entry;
-  final VoidCallback onSetPrice;
+ // final VoidCallback onSetPrice;
   final VoidCallback onPayment;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -966,7 +1147,7 @@ class _KhataCard extends StatelessWidget {
 
   const _KhataCard({
     required this.entry,
-    required this.onSetPrice,
+   // required this.onSetPrice,
     required this.onPayment,
     required this.onEdit,
     required this.onDelete,
@@ -1070,7 +1251,7 @@ class _KhataCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          _InfoRow(label: "Device", value: entry.deviceId),
+          // _InfoRow(label: "Device", value: entry.deviceId),
           _InfoRow(
             label: "Run Hours",
             value: entry.runHours.toStringAsFixed(2),
@@ -1099,16 +1280,7 @@ class _KhataCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Expanded(
-                    child: _ActionButton(
-                      label: entry.pricePerHour <= 0 ? "Set Rate" : "Rate",
-                      icon: Icons.calculate_rounded,
-                      color: AppColors.primary,
-                      textColor: AppColors.black,
-                      filled: true,
-                      onTap: onSetPrice,
-                    ),
-                  ),
+
                   const SizedBox(width: 8),
                   Expanded(
                     child: _ActionButton(

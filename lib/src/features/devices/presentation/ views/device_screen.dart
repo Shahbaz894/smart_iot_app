@@ -1,11 +1,14 @@
+import "dart:async";
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:shared_preferences/shared_preferences.dart";
+
 import "package:smart_iot_app/src/core/constant/app_color.dart";
 import "package:smart_iot_app/src/features/devices/presentation/state/device_state.dart";
 
 import "../../../../app/routes.dart";
-import "../../../auth/ presentation/providers/auth_providers.dart";
+import "../providers/device_providers.dart";
 
 class DeviceScreen extends ConsumerStatefulWidget {
   const DeviceScreen({super.key});
@@ -17,10 +20,11 @@ class DeviceScreen extends ConsumerStatefulWidget {
 class _DeviceScreenState extends ConsumerState<DeviceScreen> {
   ProviderSubscription<DeviceSelectionState>? _deviceStateSubscription;
 
+  Timer? _uiWatchdogTimer;
+
   bool _isNavigating = false;
   bool _initialLoadDone = false;
 
-  // Local storage cache map to override names coming from the database
   final Map<String, String> _customDeviceNames = {};
 
   String _deviceNameKey(String deviceId) {
@@ -33,26 +37,40 @@ class _DeviceScreenState extends ConsumerState<DeviceScreen> {
 
     Future.delayed(Duration.zero, () {
       if (!mounted) return;
+
       _deviceStateSubscription = ref.listenManual<DeviceSelectionState>(
         deviceSelectionViewModelProvider,
         _onDeviceStateChanged,
       );
+
       _initialLoad();
+    });
+
+    // Only for UI refresh. Online/offline is now based on is_live/isOnline.
+    _uiWatchdogTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) setState(() {});
     });
   }
 
   @override
   void dispose() {
     _deviceStateSubscription?.close();
+    _uiWatchdogTimer?.cancel();
+
     super.dispose();
   }
 
   Future<void> _initialLoad() async {
     if (!mounted) return;
+
     await ref.read(deviceSelectionViewModelProvider.notifier).loadDevices();
+
     if (!mounted) return;
+
     await _loadSavedDeviceNames();
+
     if (!mounted) return;
+
     setState(() {
       _initialLoadDone = true;
     });
@@ -67,6 +85,7 @@ class _DeviceScreenState extends ConsumerState<DeviceScreen> {
     if (next.error != null && previous?.error != next.error) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _isNavigating) return;
+
         _showSnack(next.error!, true);
       });
     }
@@ -74,6 +93,7 @@ class _DeviceScreenState extends ConsumerState<DeviceScreen> {
     if (next.message != null && previous?.message != next.message) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _isNavigating) return;
+
         _showSnack(next.message!, false);
       });
     }
@@ -81,28 +101,32 @@ class _DeviceScreenState extends ConsumerState<DeviceScreen> {
     if (previous?.devices.length != next.devices.length) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted || _isNavigating) return;
+
         await _loadSavedDeviceNames();
       });
     }
   }
 
-  // Reads saved string data from local SharedPreferences memory
   Future<void> _loadSavedDeviceNames() async {
     final prefs = await SharedPreferences.getInstance();
     final state = ref.read(deviceSelectionViewModelProvider);
+
     final Map<String, String> names = {};
 
     for (final device in state.devices) {
       final deviceId = device.primaryDeviceId.toString().trim();
+
       if (deviceId.isEmpty) continue;
 
       final savedName = prefs.getString(_deviceNameKey(deviceId))?.trim();
+
       if (savedName != null && savedName.isNotEmpty) {
         names[deviceId] = savedName;
       }
     }
 
     if (!mounted) return;
+
     setState(() {
       _customDeviceNames
         ..clear()
@@ -110,7 +134,6 @@ class _DeviceScreenState extends ConsumerState<DeviceScreen> {
     });
   }
 
-  // Modifies shared preference files and local maps cleanly
   Future<void> _saveDeviceName({
     required String deviceId,
     required String name,
@@ -119,61 +142,78 @@ class _DeviceScreenState extends ConsumerState<DeviceScreen> {
     final safeName = name.trim();
 
     if (safeDeviceId.isEmpty) return;
+
     final prefs = await SharedPreferences.getInstance();
 
     if (safeName.isEmpty) {
       await prefs.remove(_deviceNameKey(safeDeviceId));
+
       if (!mounted) return;
+
       setState(() {
         _customDeviceNames.remove(safeDeviceId);
       });
+
       _showSnack("Device name reset to database default.", false);
+
       return;
     }
 
     await prefs.setString(_deviceNameKey(safeDeviceId), safeName);
+
     if (!mounted) return;
+
     setState(() {
       _customDeviceNames[safeDeviceId] = safeName;
     });
+
     _showSnack("Device custom name saved locally.", false);
   }
+
   Future<void> _showEditDeviceNameDialog({
     required String deviceId,
     required String currentName,
   }) async {
     if (_isNavigating) return;
 
-    // FIX: Show dialog and pass a custom StatefulWidget builder so the controller
-    // is disposed ONLY after the closing animations finish completely.
     final dialogActionMap = await showDialog<Map<String, dynamic>?>(
       context: context,
       barrierDismissible: true,
       builder: (dialogContext) {
-        return _DialogContentWrapper(initialName: currentName);
+        return _DialogContentWrapper(
+          initialName: currentName,
+        );
       },
     );
 
-    // Context check guard
     if (!mounted || dialogActionMap == null) return;
 
-    // Wait for the dialog unmounting animation frame sequence to finish completely.
     await Future.delayed(const Duration(milliseconds: 150));
+
     if (!mounted) return;
 
-    // Execute storage modifications cleanly inside safe, post-dialog screen scope
     final String action = dialogActionMap["action"] ?? "";
+
     if (action == "reset") {
-      await _saveDeviceName(deviceId: deviceId, name: "");
+      await _saveDeviceName(
+        deviceId: deviceId,
+        name: "",
+      );
     } else if (action == "save") {
       final String userValue = dialogActionMap["value"] ?? "";
-      await _saveDeviceName(deviceId: deviceId, name: userValue);
+
+      await _saveDeviceName(
+        deviceId: deviceId,
+        name: userValue,
+      );
     }
   }
 
   void _showSnack(String message, bool isError) {
     if (!mounted || _isNavigating) return;
+
     final messenger = ScaffoldMessenger.maybeOf(context);
+
     if (messenger == null) return;
 
     messenger
@@ -200,24 +240,17 @@ class _DeviceScreenState extends ConsumerState<DeviceScreen> {
 
   Future<void> _refreshDevices() async {
     await ref.read(deviceSelectionViewModelProvider.notifier).loadDevices();
-    if (!mounted) return;
-    await _loadSavedDeviceNames();
-  }
 
-  Future<void> _logout() async {
-    if (_isNavigating) return;
-    _isNavigating = true;
-    await ref.read(deviceSelectionViewModelProvider.notifier).logout();
     if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      AppRoutes.login,
-          (route) => false,
-    );
+
+    await _loadSavedDeviceNames();
   }
 
   void _openHomeWithoutDevice() {
     if (!mounted || _isNavigating) return;
+
     _isNavigating = true;
+
     Navigator.of(context).pushNamedAndRemoveUntil(
       AppRoutes.home,
           (route) => false,
@@ -234,7 +267,9 @@ class _DeviceScreenState extends ConsumerState<DeviceScreen> {
     required String deviceName,
   }) {
     if (!mounted || _isNavigating) return;
+
     _isNavigating = true;
+
     Navigator.of(context).pushNamedAndRemoveUntil(
       AppRoutes.home,
           (route) => false,
@@ -260,16 +295,19 @@ class _DeviceScreenState extends ConsumerState<DeviceScreen> {
         "Device selection failed. Opening dashboard safely.",
         true,
       );
+
       await Future<void>.delayed(const Duration(milliseconds: 250));
+
       if (!mounted || _isNavigating) return;
+
       _openHomeWithoutDevice();
+
       return;
     }
 
     final safeSelectedDeviceId = selectedDeviceId.trim();
     final customName = _customDeviceNames[safeSelectedDeviceId]?.trim();
 
-    // Fallback logic: Use local customName if present, otherwise fallback to database display name
     final finalDeviceName = customName != null && customName.isNotEmpty
         ? customName
         : device.displayName;
@@ -283,8 +321,10 @@ class _DeviceScreenState extends ConsumerState<DeviceScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(deviceSelectionViewModelProvider);
+
     final media = MediaQuery.of(context);
     final width = media.size.width;
+
     final isSmall = width < 380;
     final isTablet = width >= 650;
     final isDesktop = width >= 1024;
@@ -311,51 +351,61 @@ class _DeviceScreenState extends ConsumerState<DeviceScreen> {
             fontWeight: FontWeight.w900,
           ),
         ),
-
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: EdgeInsets.symmetric(
-            horizontal: horizontalPadding,
-            vertical: isSmall ? 16 : 22,
-          ),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1040),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _HeaderCard(totalDevices: state.devices.length),
-                  SizedBox(height: isSmall ? 14 : 18),
-                  if (state.isLoading && state.devices.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(34),
-                      child: Center(
-                        child: CircularProgressIndicator(color: AppColors.white),
-                      ),
-                    )
-                  else if (_initialLoadDone && state.devices.isEmpty)
-                    _EmptyDeviceCard(
-                      onOpenDashboard: _openHomeWithoutDevice,
-                      onRefresh: state.isLoading ? null : _refreshDevices,
-                    )
-                  else
-                    _DeviceListSection(
-                      state: state,
-                      customDeviceNames: _customDeviceNames,
-                      onRenameDevice: ({
-                        required String deviceId,
-                        required String currentName,
-                      }) {
-                        _showEditDeviceNameDialog(
-                          deviceId: deviceId,
-                          currentName: currentName,
-                        );
-                      },
-                      onSelectDevice: _selectDevice,
+        child: RefreshIndicator(
+          color: AppColors.primary,
+          backgroundColor: AppColors.cardDark,
+          onRefresh: _refreshDevices,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            padding: EdgeInsets.symmetric(
+              horizontal: horizontalPadding,
+              vertical: isSmall ? 16 : 22,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1040),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _HeaderCard(
+                      totalDevices: state.devices.length,
                     ),
-                ],
+                    SizedBox(height: isSmall ? 14 : 18),
+                    if (state.isLoading && state.devices.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(34),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.white,
+                          ),
+                        ),
+                      )
+                    else if (_initialLoadDone && state.devices.isEmpty)
+                      _EmptyDeviceCard(
+                        onOpenDashboard: _openHomeWithoutDevice,
+                        onRefresh: state.isLoading ? null : _refreshDevices,
+                      )
+                    else
+                      _DeviceListSection(
+                        state: state,
+                        customDeviceNames: _customDeviceNames,
+                        onRenameDevice: ({
+                          required String deviceId,
+                          required String currentName,
+                        }) {
+                          _showEditDeviceNameDialog(
+                            deviceId: deviceId,
+                            currentName: currentName,
+                          );
+                        },
+                        onSelectDevice: _selectDevice,
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -381,6 +431,57 @@ class _DeviceListSection extends StatelessWidget {
     required this.onRenameDevice,
   });
 
+  bool _readOnlineFromDevice(dynamic device) {
+    dynamic value;
+
+    try {
+      value = device.isOnline;
+    } catch (_) {}
+
+    value ??= _tryRead(device, "is_online");
+    value ??= _tryRead(device, "isLive");
+    value ??= _tryRead(device, "is_live");
+
+    return _toBool(value);
+  }
+
+  dynamic _tryRead(dynamic source, String key) {
+    if (source == null) return null;
+
+    if (source is Map) {
+      return source[key];
+    }
+
+    try {
+      switch (key) {
+        case "isOnline":
+          return source.isOnline;
+        case "is_online":
+          return source.is_online;
+        case "isLive":
+          return source.isLive;
+        case "is_live":
+          return source.is_live;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  bool _toBool(dynamic value) {
+    if (value == null) return false;
+
+    if (value is bool) return value;
+
+    if (value is int) return value == 1;
+
+    if (value is num) return value.toInt() == 1;
+
+    final text = value.toString().trim().toLowerCase();
+
+    return text == "1" || text == "true" || text == "online";
+  }
+
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
@@ -388,6 +489,7 @@ class _DeviceListSection extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
+
         final crossAxisCount = maxWidth >= 980
             ? 3
             : maxWidth >= 650
@@ -395,6 +497,7 @@ class _DeviceListSection extends StatelessWidget {
             : 1;
 
         final spacing = width < 380 ? 10.0 : 14.0;
+
         final itemWidth = crossAxisCount == 1
             ? maxWidth
             : (maxWidth - (spacing * (crossAxisCount - 1))) / crossAxisCount;
@@ -404,27 +507,32 @@ class _DeviceListSection extends StatelessWidget {
           runSpacing: spacing,
           children: state.devices.map((device) {
             final deviceId = device.primaryDeviceId.toString().trim();
+
             final selected = state.selectedDeviceId == device.primaryDeviceId;
 
             final savedName = customDeviceNames[deviceId]?.trim();
+
             final displayTitle = savedName != null && savedName.isNotEmpty
                 ? savedName
                 : device.displayName;
 
-            // Use backend/device model status only.
-            // Do NOT force offline from updatedAt here because updatedAt is not
-            // always a live heartbeat timestamp.
-            final bool verifiedOnlineStatus = device.isOnline ?? false;
+            // ✅ FINAL RULE:
+            // is_live == 1 / isOnline == true  => Online
+            // is_live == 0 / isOnline == false => Offline
+            final bool calculatedOnlineStatus = _readOnlineFromDevice(device);
+
+            debugPrint(
+              "DEVICE CARD => $deviceId | isOnline=$calculatedOnlineStatus",
+            );
 
             return SizedBox(
               width: itemWidth,
-              child:
-              _DeviceCard(
+              child: _DeviceCard(
                 title: displayTitle,
                 originalTitle: device.displayName,
                 deviceId: device.primaryDeviceId,
                 location: device.location,
-                isOnline: verifiedOnlineStatus,
+                isOnline: calculatedOnlineStatus,
                 isSelected: selected,
                 hasCustomName: savedName != null && savedName.isNotEmpty,
                 onTap: () => onSelectDevice(device),
@@ -432,7 +540,7 @@ class _DeviceListSection extends StatelessWidget {
                   deviceId: deviceId,
                   currentName: displayTitle,
                 ),
-              )
+              ),
             );
           }).toList(),
         );
@@ -443,7 +551,10 @@ class _DeviceListSection extends StatelessWidget {
 
 class _HeaderCard extends StatelessWidget {
   final int totalDevices;
-  const _HeaderCard({required this.totalDevices});
+
+  const _HeaderCard({
+    required this.totalDevices,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -458,7 +569,9 @@ class _HeaderCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.cardDark,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.borderDark),
+        border: Border.all(
+          color: AppColors.borderDark,
+        ),
       ),
       child: Row(
         children: [
@@ -491,10 +604,13 @@ class _HeaderCard extends StatelessWidget {
     );
   }
 }
-// This extracted widget guarantees the lifecycle of the TextEditingController matches the dialog layout view
+
 class _DialogContentWrapper extends StatefulWidget {
   final String initialName;
-  const _DialogContentWrapper({required this.initialName});
+
+  const _DialogContentWrapper({
+    required this.initialName,
+  });
 
   @override
   State<_DialogContentWrapper> createState() => _DialogContentWrapperState();
@@ -506,13 +622,16 @@ class _DialogContentWrapperState extends State<_DialogContentWrapper> {
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.initialName.trim());
+
+    _controller = TextEditingController(
+      text: widget.initialName.trim(),
+    );
   }
 
   @override
   void dispose() {
-    // This now fires safely AFTER the pop animation finishes completely
     _controller.dispose();
+
     super.dispose();
   }
 
@@ -530,7 +649,9 @@ class _DialogContentWrapperState extends State<_DialogContentWrapper> {
       backgroundColor: AppColors.cardDark,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(22),
-        side: const BorderSide(color: AppColors.borderDark),
+        side: const BorderSide(
+          color: AppColors.borderDark,
+        ),
       ),
       title: Text(
         "Edit Device Name",
@@ -580,7 +701,9 @@ class _DialogContentWrapperState extends State<_DialogContentWrapper> {
       actions: [
         TextButton(
           onPressed: () {
-            Navigator.of(context).pop({"action": "reset"});
+            Navigator.of(context).pop({
+              "action": "reset",
+            });
           },
           child: const Text(
             "Reset",
@@ -616,7 +739,9 @@ class _DialogContentWrapperState extends State<_DialogContentWrapper> {
           ),
           child: const Text(
             "Save",
-            style: TextStyle(fontWeight: FontWeight.w900),
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ),
       ],
@@ -624,13 +749,12 @@ class _DialogContentWrapperState extends State<_DialogContentWrapper> {
   }
 }
 
-
 class _DeviceCard extends StatelessWidget {
   final String title;
   final String originalTitle;
   final String deviceId;
   final String location;
-  final bool isOnline; // Yeh ab timestamp logic se decide hoke aayega
+  final bool isOnline;
   final bool isSelected;
   final bool hasCustomName;
   final VoidCallback onTap;
@@ -653,7 +777,6 @@ class _DeviceCard extends StatelessWidget {
     final width = MediaQuery.of(context).size.width;
     final isSmall = width < 380;
 
-    // 🎨 Offline aur Disconnected dono surto mein purely WARNING/OFFLINE color show hoga
     final statusColor = isOnline ? AppColors.green : AppColors.warning;
 
     return Material(
@@ -726,16 +849,28 @@ class _DeviceCard extends StatelessWidget {
                 ),
               ],
               SizedBox(height: isSmall ? 12 : 16),
-              _InfoLine(icon: Icons.memory_rounded, label: "Device ID", value: deviceId),
+              _InfoLine(
+                icon: Icons.memory_rounded,
+                label: "Device ID",
+                value: deviceId,
+              ),
               const SizedBox(height: 8),
-              _InfoLine(icon: Icons.location_on_outlined, label: "Location", value: location),
+              _InfoLine(
+                icon: Icons.location_on_outlined,
+                label: "Location",
+                value: location,
+              ),
               SizedBox(height: isSmall ? 12 : 14),
               Row(
                 children: [
-                  Icon(Icons.circle, color: statusColor, size: 12),
+                  Icon(
+                    Icons.circle,
+                    color: statusColor,
+                    size: 12,
+                  ),
                   const SizedBox(width: 8),
                   Text(
-                    isOnline ? "Online" : "Offline", // Dono scenarios mein single word standard 'Offline'
+                    isOnline ? "Online" : "Offline",
                     style: TextStyle(
                       color: statusColor,
                       fontSize: isSmall ? 12.5 : 14,
@@ -743,7 +878,11 @@ class _DeviceCard extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white54, size: 16),
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: Colors.white54,
+                    size: 16,
+                  ),
                 ],
               ),
             ],
@@ -759,7 +898,11 @@ class _InfoLine extends StatelessWidget {
   final String label;
   final String value;
 
-  const _InfoLine({required this.icon, required this.label, required this.value});
+  const _InfoLine({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -767,7 +910,11 @@ class _InfoLine extends StatelessWidget {
 
     return Row(
       children: [
-        Icon(icon, color: Colors.white54, size: isSmall ? 16 : 18),
+        Icon(
+          icon,
+          color: Colors.white54,
+          size: isSmall ? 16 : 18,
+        ),
         const SizedBox(width: 8),
         Text(
           "$label: ",
@@ -796,7 +943,10 @@ class _EmptyDeviceCard extends StatelessWidget {
   final VoidCallback onOpenDashboard;
   final Future<void> Function()? onRefresh;
 
-  const _EmptyDeviceCard({required this.onOpenDashboard, required this.onRefresh});
+  const _EmptyDeviceCard({
+    required this.onOpenDashboard,
+    required this.onRefresh,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -808,7 +958,9 @@ class _EmptyDeviceCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.cardDark,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.borderDark),
+        border: Border.all(
+          color: AppColors.borderDark,
+        ),
       ),
       child: Column(
         children: [
@@ -843,12 +995,45 @@ class _EmptyDeviceCard extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: AppColors.black,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
               ),
               icon: const Icon(Icons.monitor_heart_rounded),
-              label: const Text("Open Dashboard", style: TextStyle(fontWeight: FontWeight.w900)),
+              label: const Text(
+                "Open Dashboard",
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ),
           ),
+          if (onRefresh != null) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: isSmall ? 46 : 50,
+              child: OutlinedButton.icon(
+                onPressed: onRefresh,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(
+                    color: AppColors.primary,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text(
+                  "Refresh Devices",
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

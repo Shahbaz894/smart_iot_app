@@ -10,6 +10,13 @@ class DeviceRepository {
     return deviceApiService.getDevicesByUserId(userId);
   }
 
+  // ✅ NEW: Fetch latest telemetry for device online/offline status
+  // is_live == 1 => Online
+  // is_live == 0 => Offline
+  Future<Map<String, dynamic>?> getLatestTelemetryByDeviceId(String deviceId) {
+    return deviceApiService.getLatestTelemetryByDeviceId(deviceId);
+  }
+
   Future<DeviceModel> createDevice({
     required String userId,
     required Map<String, dynamic> data,

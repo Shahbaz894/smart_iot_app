@@ -1,11 +1,310 @@
+
+//
+// class HomeScreen extends ConsumerStatefulWidget {
+//   final String? deviceId;
+//   const HomeScreen({super.key, this.deviceId});
+//
+//   @override
+//   ConsumerState<HomeScreen> createState() => _HomeScreenState();
+// }
+//
+// class _HomeScreenState extends ConsumerState<HomeScreen> {
+//   final TextEditingController customerNameController = TextEditingController();
+//   final FocusNode customerNameFocusNode = FocusNode();
+//
+//   String? deviceId;
+//   String? deviceName;
+//
+//   bool _isProcessingCommand = false;
+//   bool? _optimisticRunning; // ⚡ Iske bagair UI 'Stopping' dikhata hai
+//
+//   String? _lastSeenPacketId;
+//   DateTime? _lastPacketReceivedAt;
+//   bool _isWaitingForSync = true;
+//   Timer? _watchdogTimer;
+//   Timer? _uiRefreshTimer;
+//
+//   static const _staleThreshold = Duration(seconds: 25);
+//
+//   @override
+//   void initState() {
+//     super.initState();
+//     _loadCache();
+//     _initDevice();
+//     _startWatchdog();
+//   }
+//
+//   @override
+//   void dispose() {
+//     _watchdogTimer?.cancel();
+//     _uiRefreshTimer?.cancel();
+//     customerNameController.dispose();
+//     customerNameFocusNode.dispose();
+//
+//     Future.microtask(() {
+//       if (mounted) {
+//         ref.read(telemetryViewModelProvider.notifier).closeStream();
+//       }
+//     });
+//     super.dispose();
+//   }
+//
+//   Future<void> _loadCache() async {
+//     final prefs = await SharedPreferences.getInstance();
+//     if (mounted) {
+//       setState(() {
+//         customerNameController.text = prefs.getString("saved_motor_customer_name") ?? "";
+//       });
+//     }
+//   }
+//
+//   Future<void> _initDevice() async {
+//     WidgetsBinding.instance.addPostFrameCallback((_) async {
+//       final args = ModalRoute.of(context)?.settings.arguments;
+//       if (args is Map) {
+//         deviceId = args["deviceId"]?.toString().trim();
+//         deviceName = args["deviceName"]?.toString().trim();
+//       }
+//
+//       if (deviceId == null || deviceId!.isEmpty) deviceId = widget.deviceId?.trim();
+//       if (deviceId == null || deviceId!.isEmpty) {
+//         deviceId = "ESP32_001_TW";
+//         deviceName = "SmartWell Pump 1";
+//       }
+//
+//       // if (deviceId != null && deviceId!.isNotEmpty) {
+//       //   await ref.read(telemetryViewModelProvider.notifier).loadLatest(deviceId!);
+//       //   await ref.read(motorViewModelProvider.notifier).loadInitialMotorState(deviceId: deviceId!);
+//       //   ref.read(telemetryViewModelProvider.notifier).startLiveStream(deviceId!);
+//       //   _startLiveTicker();
+//       // }
+//
+//       if (mounted) setState(() {});
+//     });
+//   }
+//
+//   void _startLiveTicker() {
+//     _uiRefreshTimer?.cancel();
+//     _uiRefreshTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+//       if (mounted) setState(() {});
+//     });
+//   }
+//
+//   void _startWatchdog() {
+//     _watchdogTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+//       if (mounted) setState(() {});
+//     });
+//
+//     Future.delayed(const Duration(seconds: 15), () {
+//       if (mounted && _isWaitingForSync) setState(() => _isWaitingForSync = false);
+//     });
+//   }
+//
+//   DeviceConnectionStatus _computeStatus(dynamic latest) {
+//     if (deviceId == null || deviceId!.isEmpty) return DeviceConnectionStatus.noDevice;
+//     if (_isProcessingCommand) return DeviceConnectionStatus.connected;
+//     if (latest == null) return DeviceConnectionStatus.waitingTelemetry;
+//
+//     // ⚡ FIX: Direct property call, no maps, no void errors!
+//     if (latest.isLive == 1) return DeviceConnectionStatus.connected;
+//
+//     if (_lastPacketReceivedAt == null) return DeviceConnectionStatus.waitingTelemetry;
+//
+//     final age = DateTime.now().difference(_lastPacketReceivedAt!);
+//     return age > _staleThreshold ? DeviceConnectionStatus.disconnected : DeviceConnectionStatus.connected;
+//   }
+//
+//   Future<void> _toggleMotor(bool currentlyRunning) async {
+//     customerNameFocusNode.unfocus();
+//     FocusScope.of(context).unfocus();
+//
+//     if (_isProcessingCommand || deviceId == null) return;
+//
+//     final name = customerNameController.text.trim();
+//
+//     if (!currentlyRunning && name.isEmpty) {
+//       if (mounted) {
+//         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter a customer name")));
+//       }
+//       return;
+//     }
+//
+//     // ⚡ Yahan pe optimistic logic set kar rahe hain taake UI "Starting..." show kare
+//     setState(() {
+//       _isProcessingCommand = true;
+//       _optimisticRunning = !currentlyRunning;
+//     });
+//
+//     try {
+//       final motorVm = ref.read(motorViewModelProvider.notifier);
+//       final khataVm = ref.read(khataViewModelProvider.notifier);
+//       final prefs = await SharedPreferences.getInstance();
+//
+//       if (currentlyRunning) {
+//         final log = await motorVm.stopMotor(deviceId: deviceId!, customerName: name);
+//         if (log != null) {
+//           await khataVm.createFromMotorLog(log: log, customerName: name, deviceId: deviceId!, pricePerHour: 50.0);
+//           await khataVm.loadEntries();
+//         }
+//         await prefs.remove("saved_motor_customer_name");
+//       } else {
+//         await prefs.setString("saved_motor_customer_name", name);
+//         await motorVm.startMotor(deviceId: deviceId!, customerName: name);
+//       }
+//
+//       await Future.delayed(const Duration(seconds: 4));
+//       await ref.read(telemetryViewModelProvider.notifier).loadLatest(deviceId!);
+//
+//     } catch (e) {
+//       if (mounted) {
+//         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+//       }
+//     } finally {
+//       if (mounted) {
+//         setState(() {
+//           _isProcessingCommand = false;
+//           _optimisticRunning = null;
+//         });
+//       }
+//     }
+//   }
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final telemetry = ref.watch(telemetryViewModelProvider);
+//     final latest = telemetry.latest;
+//
+//     if (latest != null) {
+//       final incomingId = latest.id?.toString() ?? latest.createdAt.toString();
+//       if (incomingId != _lastSeenPacketId) {
+//         _lastSeenPacketId = incomingId;
+//         _lastPacketReceivedAt = DateTime.now();
+//         if (_isWaitingForSync) {
+//           WidgetsBinding.instance.addPostFrameCallback((_) {
+//             if (mounted) setState(() => _isWaitingForSync = false);
+//           });
+//         }
+//       }
+//     }
+//
+//     // ⚡ FIX: Sab se aasan aur error-free tareeqa (No "void" errors here!)
+//     bool isActuallyRunning = latest != null && latest.statusCode == 1;
+//
+//     // Agar hum button daba rahe hain, toh optimistic UI dikhao, warna real hardware state dikhao
+//     bool isRunning = (_isProcessingCommand && _optimisticRunning != null)
+//         ? _optimisticRunning!
+//         : isActuallyRunning;
+//
+//     String displayRunningTime = "00:00:00";
+//     if (isRunning && latest?.createdAt != null) {
+//       try {
+//         final serverStartTime = DateTime.parse(latest!.createdAt.toString());
+//         final durationDifference = DateTime.now().difference(serverStartTime);
+//         if (durationDifference.inSeconds > 0) {
+//           displayRunningTime =
+//           "${durationDifference.inHours.toString().padLeft(2, '0')}:"
+//               "${(durationDifference.inMinutes % 60).toString().padLeft(2, '0')}:"
+//               "${(durationDifference.inSeconds % 60).toString().padLeft(2, '0')}";
+//         }
+//       } catch (e) {
+//         displayRunningTime = "Running";
+//       }
+//     }
+//
+//
+//     // ⚡ NEW: Status Label Logic (Trigger Type based)
+//     String statusLabel = "Stopped";
+//     if (isRunning) {
+//       switch (latest?.triggerType?.toLowerCase()) {
+//         case 'physical':
+//           statusLabel = "Running (Manual)";
+//           break;
+//         case 'app':
+//           statusLabel = "Running (App)";
+//           break;
+//         case 'timer':
+//           statusLabel = "Running (Timer)";
+//           break;
+//         default:
+//           statusLabel = "Running";
+//       }
+//     }
+//
+//     final DeviceConnectionStatus status = _computeStatus(latest);
+//
+//     // final snapshot = MotorSnapshot.fromAppState(
+//     //   isRunning: isRunning,
+//     //   isSyncing: _isProcessingCommand,
+//     //   latest: latest,
+//     //   status: status,
+//     //
+//     // );
+//     final snapshot = MotorSnapshot.fromAppState(
+//       isRunning: isRunning,
+//       isSyncing: _isProcessingCommand,
+//       latest: latest,
+//       status: status,
+//       // ⚡ Yahan pass karein
+//     );
+//
+//     return Scaffold(
+//       backgroundColor: AppColors.darkBgSoft,
+//       appBar: SmartWellHomeAppBar(
+//         hasDevice: deviceId != null && deviceId!.isNotEmpty,
+//         displayName: deviceName ?? "SmartWell Pump",
+//         deviceId: deviceId,
+//         onSelectDevice: () {
+//           Navigator.pushReplacementNamed(context, AppRoutes.devices);
+//         },
+//       ),
+//       drawer: ProfessionalDrawer(deviceId: deviceId ?? "ESP32_001_TW"),
+//       body: HomeDashboardContent(
+//         isSyncing: _isProcessingCommand,
+//         onMotorTap: () => _toggleMotor(isActuallyRunning), // Back-end ko sach batao
+//         hasDevice: deviceId != null && deviceId!.isNotEmpty,
+//         deviceId: deviceId,
+//         displayName: deviceName ?? "SmartWell Pump",
+//         latest: latest,
+//         telemetryState: telemetry,
+//         motorState: ref.watch(motorViewModelProvider),
+//         snapshot: snapshot,
+//         status: status,
+//         pulseAnimation: const AlwaysStoppedAnimation(1.0),
+//         customerNameController: customerNameController,
+//         customerNameFocusNode: customerNameFocusNode,
+//         customerSuggestions: const [],
+//         runningTime: displayRunningTime,
+//         horizontalPadding: 16,
+//         crossAxisCount: 2,
+//         childAspectRatio: 1.0,
+//         buttonSize: 180,
+//         isVerySmall: false,
+//         onRefresh: () async {
+//           if (deviceId != null && deviceId!.isNotEmpty) {
+//             await ref.read(telemetryViewModelProvider.notifier).loadLatest(deviceId!);
+//             if (mounted) {
+//               setState(() {
+//                 _lastPacketReceivedAt = DateTime.now();
+//               });
+//             }
+//           }
+//         },
+//         formatValue: (val, unit, {decimals = 1, required status}) {
+//           return "${val?.toStringAsFixed(decimals) ?? '--'} $unit";
+//         },
+//       ),
+//     );
+//   }
+// }
 import "dart:async";
 
 import "package:flutter/material.dart";
-import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:shared_preferences/shared_preferences.dart";
 
 import "package:smart_iot_app/src/core/constant/app_color.dart";
+import "package:smart_iot_app/src/features/khata/data/models/khata_entry_model.dart";
+import "package:smart_iot_app/src/features/motor/data/models/motor_log_response.dart";
 import "package:smart_iot_app/src/features/widget/custom_drawer.dart";
 import "package:smart_iot_app/src/features/widget/home_dashboard_content.dart";
 import "package:smart_iot_app/src/features/widget/motor_snapshot.dart";
@@ -13,8 +312,8 @@ import "package:smart_iot_app/src/features/widget/smart_well_home_app_bar.dart";
 
 import "../../../../app/routes.dart";
 import "../../../khata/presentation/providers/ khata_providers.dart";
+import "../../../logs/data/presentation/providers/motor_log_providers.dart";
 import "../../../motor/presentation/ providers/motor_providers.dart";
-import "../../../motor/presentation/state/motor_state.dart";
 import "../../../telemetry/presentation/providers/telemetry_providers.dart";
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -29,616 +328,634 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController pulseController;
-  late final Animation<double> pulseAnimation;
-
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   final TextEditingController customerNameController = TextEditingController();
   final FocusNode customerNameFocusNode = FocusNode();
 
-  Timer? runTimer;
-  Timer? telemetryTimer;
-  Timer? motorSyncTimer;
-
-  int runSeconds = 0;
-  int telemetryFailures = 0;
-
-  String? userId;
   String? deviceId;
   String? deviceName;
 
-  bool didSetupDevice = false;
-  bool isTelemetryLoading = false;
-  bool isMotorSyncing = false;
-  bool noDeviceSnackShown = false;
+  bool _isProcessingCommand = false;
+  bool? _optimisticRunning;
 
-  bool? _syncedMotorOn;
-  DateTime? _ignoreRemoteMotorSyncUntil;
+  String? _lastSeenPacketId;
+  DateTime? _lastPacketReceivedAt;
+  bool _isWaitingForSync = true;
 
-  bool get hasDevice => deviceId != null && deviceId!.trim().isNotEmpty;
+  Timer? _watchdogTimer;
+  Timer? _uiRefreshTimer;
+
+  String? _activeMotorLogId;
+  KhataEntryModel? _activeKhataEntry;
+  bool _khataLogBusy = false;
+
+  static const Duration _staleThreshold = Duration(seconds: 25);
+  static const double _defaultPricePerHour = 50.0;
 
   @override
   void initState() {
     super.initState();
 
-    pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 850),
-    )..repeat(reverse: true);
-
-    pulseAnimation = Tween<double>(
-      begin: 0.82,
-      end: 1.12,
-    ).animate(
-      CurvedAnimation(
-        parent: pulseController,
-        curve: Curves.easeInOut,
-      ),
-    );
-
-    _loadSavedMotorState();
-  }
-
-  Future<void> _loadSavedMotorState() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedName = prefs.getString("saved_motor_customer_name");
-      final wasRunning = prefs.getBool("is_motor_currently_running") ?? false;
-      final startTimeMillis = prefs.getInt("motor_start_time_epoch");
-
-      if (mounted) {
-        setState(() {
-          if (savedName != null && savedName.isNotEmpty) {
-            customerNameController.text = savedName;
-          }
-
-          if (wasRunning) {
-            _syncedMotorOn = true;
-
-            if (startTimeMillis != null) {
-              final startTime = DateTime.fromMillisecondsSinceEpoch(startTimeMillis);
-              final difference = DateTime.now().difference(startTime).inSeconds;
-              runSeconds = difference > 0 ? difference : 0;
-              _startLocalTimer();
-            }
-          }
-        });
-        ref.read(khataViewModelProvider.notifier).loadEntries();
-      }
-    } catch (e) {
-      debugPrint("🔴 Error restoring system states: $e");
-    }
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    if (didSetupDevice) return;
-    didSetupDevice = true;
-
-    final args = ModalRoute.of(context)?.settings.arguments;
-
-    if (args is Map) {
-      userId = args["userId"]?.toString();
-      final rawDeviceId = args["deviceId"]?.toString();
-      deviceId = rawDeviceId == null || rawDeviceId.trim().isEmpty ? null : rawDeviceId.trim();
-      final rawDeviceName = args["deviceName"]?.toString();
-      deviceName = rawDeviceName == null || rawDeviceName.trim().isEmpty ? null : rawDeviceName.trim();
-    }
-
-    final widgetDeviceId = widget.deviceId?.trim();
-    deviceId ??= widgetDeviceId == null || widgetDeviceId.isEmpty ? null : widgetDeviceId;
-
-    if (hasDevice) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(motorViewModelProvider.notifier).listenToLiveHardwareSync(deviceId!);
-      });
-
-      Future.microtask(() async {
-        await ref.read(motorViewModelProvider.notifier).loadInitialMotorState(deviceId: deviceId!);
-        await syncMotorStatus();
-        await loadTelemetry(showError: false, showLoading: false);
-        await ref.read(khataViewModelProvider.notifier).loadEntries();
-      });
-
-      motorSyncTimer?.cancel();
-      motorSyncTimer = Timer.periodic(const Duration(seconds: 3), (_) => syncMotorStatus());
-
-      telemetryTimer?.cancel();
-      telemetryTimer = Timer.periodic(const Duration(seconds: 5), (_) => loadTelemetry(showError: false, showLoading: false));
-    } else {
-      Future.microtask(() {
-        if (!mounted || noDeviceSnackShown) return;
-        noDeviceSnackShown = true;
-        showMessage("Device not connected. Opened dashboard safely.", false);
-      });
-    }
+    _loadCache();
+    _initDevice();
+    _startWatchdog();
   }
 
   @override
   void dispose() {
-    pulseController.dispose();
+    _watchdogTimer?.cancel();
+    _uiRefreshTimer?.cancel();
+
     customerNameController.dispose();
     customerNameFocusNode.dispose();
-    runTimer?.cancel();
-    telemetryTimer?.cancel();
-    motorSyncTimer?.cancel();
+
+    ref.read(telemetryViewModelProvider.notifier).closeStream();
+
     super.dispose();
   }
 
-  Future<void> syncMotorStatus() async {
-    if (!hasDevice || isMotorSyncing) return;
+  Future<void> _loadCache() async {
+    final prefs = await SharedPreferences.getInstance();
 
-    final now = DateTime.now();
-    if (_ignoreRemoteMotorSyncUntil != null && now.isBefore(_ignoreRemoteMotorSyncUntil!)) {
-      return;
-    }
+    if (!mounted) return;
 
-    isMotorSyncing = true;
-    try {
-      final motorState = ref.read(motorViewModelProvider);
-      bool? newMotorOn = motorState.isMotorOn ? true : (motorState.isMotorOff ? false : null);
-
-      if (!mounted) return;
-
-      if (_syncedMotorOn != newMotorOn && newMotorOn != null) {
-        final prefs = await SharedPreferences.getInstance();
-        setState(() {
-          _syncedMotorOn = newMotorOn;
-        });
-
-        if (newMotorOn == false) {
-          await prefs.setBool("is_motor_currently_running", false);
-          await prefs.remove("saved_motor_customer_name");
-          await prefs.remove("motor_start_time_epoch");
-          customerNameController.clear();
-          _stopLocalTimer(reset: true);
-        }
-      }
-    } catch (e) {
-      debugPrint("🔴 MOTOR SYNC FAILED => $e");
-    } finally {
-      isMotorSyncing = false;
-    }
-  }
-
-  DeviceConnectionStatus connectionStatus(dynamic latest) {
-    if (!hasDevice) return DeviceConnectionStatus.noDevice;
-    if (latest != null && telemetryFailures < 3) return DeviceConnectionStatus.connected;
-    if (telemetryFailures >= 3) return DeviceConnectionStatus.disconnected;
-    return DeviceConnectionStatus.waitingTelemetry;
-  }
-
-  dynamic _readValue(dynamic source, {required List<dynamic Function()> objectReaders, required List<String> mapKeys}) {
-    if (source == null) return null;
-    if (source is Map) {
-      for (final key in mapKeys) {
-        if (source.containsKey(key)) return source[key];
-      }
-    }
-    for (final reader in objectReaders) {
-      try { final value = reader(); if (value != null) return value; } catch (_) {}
-    }
-    return null;
-  }
-
-  int? _toInt(dynamic value) {
-    if (value == null) return null;
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    return int.tryParse(value.toString().trim());
-  }
-
-  double? _toDouble(dynamic value) {
-    if (value == null) return null;
-    if (value is double) return value;
-    if (value is num) return value.toDouble();
-    return double.tryParse(value.toString().trim());
-  }
-
-  bool isFreshTelemetry(dynamic latest) {
-    if (latest == null) return false;
-    final rawCreatedAt = _readValue(latest, objectReaders: [() => latest?.createdAt, () => latest?.created_at], mapKeys: const ["createdAt", "created_at"]);
-    if (rawCreatedAt == null) return false;
-    final createdAt = DateTime.tryParse(rawCreatedAt.toString());
-    if (createdAt == null) return false;
-    return DateTime.now().toUtc().difference(createdAt.toUtc()).inSeconds.abs() <= 25;
-  }
-
-  bool telemetrySaysRunning(dynamic latest) {
-    if (latest == null || !isFreshTelemetry(latest)) return false;
-    final int? statusCode = _toInt(_readValue(latest, objectReaders: [() => latest?.statusCode, () => latest?.status_code], mapKeys: const ["statusCode", "status_code"]));
-    if (statusCode == 0 || statusCode == 4) return false;
-    if (statusCode == 1 || statusCode == 2 || statusCode == 3) return true;
-    final double current = _toDouble(_readValue(latest, objectReaders: [() => latest?.current], mapKeys: const ["current"])) ?? 0.0;
-    final double freq = _toDouble(_readValue(latest, objectReaders: [() => latest?.freq], mapKeys: const ["freq"])) ?? 0.0;
-    return current > 0.1 || freq > 0;
-  }
-
-  String friendlyError(String? error) {
-    final text = (error ?? "").toLowerCase();
-    if (text.contains("socket") || text.contains("connection") || text.contains("network") || text.contains("timeout")) {
-      return "No internet connection. Please check Wi-Fi or mobile data.";
-    }
-    return text.trim().isEmpty ? "Unable to connect. Please try again." : error!;
-  }
-
-  Future<void> loadTelemetry({bool showError = false, bool showLoading = false}) async {
-    if (isTelemetryLoading || !hasDevice) return;
-    isTelemetryLoading = true;
-    try {
-      await ref.read(telemetryViewModelProvider.notifier).loadLatest(deviceId!, showLoading: showLoading);
-      if (!mounted) return;
-      if (ref.read(telemetryViewModelProvider).latest != null) {
-        telemetryFailures = 0;
-      } else {
-        telemetryFailures++;
-      }
-    } catch (e) {
-      telemetryFailures++;
-      if (showError) showMessage(friendlyError(e.toString()), true);
-    } finally {
-      isTelemetryLoading = false;
-    }
-  }
-
-  void _startLocalTimer() {
-    runTimer?.cancel();
-    runTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      setState(() => runSeconds++);
+    setState(() {
+      customerNameController.text =
+          prefs.getString("saved_motor_customer_name") ?? "";
     });
   }
 
-  void _stopLocalTimer({bool reset = false}) {
-    runTimer?.cancel();
-    runTimer = null;
-    if (reset && mounted) setState(() => runSeconds = 0);
+  Future<void> _initDevice() async {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final args = ModalRoute.of(context)?.settings.arguments;
+
+      if (args is Map) {
+        deviceId = args["deviceId"]?.toString().trim();
+        deviceName = args["deviceName"]?.toString().trim();
+      }
+
+      if (deviceId == null || deviceId!.isEmpty) {
+        deviceId = widget.deviceId?.trim();
+      }
+
+      if (deviceId == null || deviceId!.isEmpty) {
+        deviceId = "ESP32_001_TW";
+        deviceName = "SmartWell Pump 1";
+      }
+
+      if (deviceId != null && deviceId!.isNotEmpty) {
+        debugPrint("🚀 INIT DEVICE => ID: $deviceId, NAME: $deviceName");
+
+        await ref
+            .read(telemetryViewModelProvider.notifier)
+            .loadLatest(deviceId!);
+
+        await ref
+            .read(motorViewModelProvider.notifier)
+            .loadInitialMotorState(deviceId: deviceId!);
+
+        await ref
+            .read(motorLogViewModelProvider.notifier)
+            .loadLogs(deviceId!);
+
+        await ref.read(khataViewModelProvider.notifier).loadEntries();
+
+        await _restoreRunningKhataSessionIfNeeded();
+
+        ref.read(telemetryViewModelProvider.notifier).startLiveStream(deviceId!);
+
+        _startLiveTicker();
+      }
+
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
-  String get runningTime {
-    final seconds = runSeconds <= 0 ? 0 : runSeconds;
-    final h = (seconds ~/ 3600).toString().padLeft(2, "0");
-    final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, "0");
-    final s = (seconds % 60).toString().padLeft(2, "0");
-    return "$h:$m:$s";
+  void _startLiveTicker() {
+    _uiRefreshTimer?.cancel();
+
+    _uiRefreshTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
-  String formatValue(double? value, String unit, {int decimals = 1, required DeviceConnectionStatus status}) {
-    if (status == DeviceConnectionStatus.noDevice || value == null) return "-- $unit";
-    return "${value.toStringAsFixed(decimals)} $unit";
+  void _startWatchdog() {
+    _watchdogTimer?.cancel();
+
+    _watchdogTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+
+    Future.delayed(const Duration(seconds: 15), () {
+      if (mounted && _isWaitingForSync) {
+        setState(() {
+          _isWaitingForSync = false;
+        });
+      }
+    });
   }
 
-  Future<void> toggleMotor(MotorSnapshot snapshot) async {
-    if (!hasDevice) {
-      showMessage("Device not connected. Please select a device first.", true);
+  DeviceConnectionStatus _computeStatus(dynamic latest) {
+    if (deviceId == null || deviceId!.isEmpty) {
+      return DeviceConnectionStatus.noDevice;
+    }
+
+    if (_isProcessingCommand) {
+      return DeviceConnectionStatus.connected;
+    }
+
+    if (latest == null) {
+      return _isWaitingForSync
+          ? DeviceConnectionStatus.waitingTelemetry
+          : DeviceConnectionStatus.disconnected;
+    }
+
+    if (_lastPacketReceivedAt == null) {
+      return DeviceConnectionStatus.waitingTelemetry;
+    }
+
+    final age = DateTime.now().difference(_lastPacketReceivedAt!);
+
+    return age > _staleThreshold
+        ? DeviceConnectionStatus.disconnected
+        : DeviceConnectionStatus.connected;
+  }
+
+  Future<void> _restoreRunningKhataSessionIfNeeded() async {
+    if (deviceId == null || deviceId!.trim().isEmpty) return;
+
+    final latestNow = ref.read(telemetryViewModelProvider).latest;
+
+    final bool motorRunning = latestNow != null && latestNow.statusCode == 1;
+
+    if (!motorRunning) return;
+
+    final customerName = customerNameController.text.trim().isEmpty
+        ? "Unknown Customer"
+        : customerNameController.text.trim();
+
+    await _startKhataForLatestOpenLogIfNeeded(
+      customerName: customerName,
+      deviceId: deviceId!,
+    );
+  }
+
+  Future<bool> _waitForTelemetryMotorState({
+    required bool expectedRunning,
+  }) async {
+    if (deviceId == null || deviceId!.trim().isEmpty) return false;
+
+    for (int i = 0; i < 8; i++) {
+      await Future.delayed(const Duration(milliseconds: 700));
+
+      await ref
+          .read(telemetryViewModelProvider.notifier)
+          .loadLatest(deviceId!);
+
+      final latestNow = ref.read(telemetryViewModelProvider).latest;
+
+      final bool runningNow = latestNow != null && latestNow.statusCode == 1;
+
+      if (runningNow == expectedRunning) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  Future<void> _startKhataForLatestOpenLogIfNeeded({
+    required String customerName,
+    required String deviceId,
+  }) async {
+    if (_khataLogBusy) return;
+
+    _khataLogBusy = true;
+
+    try {
+      MotorLogResponse? openLog;
+
+      for (int i = 0; i < 6; i++) {
+        await ref
+            .read(motorLogViewModelProvider.notifier)
+            .loadLogs(deviceId);
+
+        openLog = _latestOpenMotorLog();
+
+        if (openLog != null) break;
+
+        await Future.delayed(const Duration(milliseconds: 600));
+      }
+
+      if (openLog == null) {
+        debugPrint("KHATA LOG: No open motor log found.");
+        return;
+      }
+
+      final logId = openLog.id;
+
+      if (logId == null || logId.trim().isEmpty) {
+        debugPrint("KHATA LOG: Open motor log ID missing.");
+        return;
+      }
+
+      await ref.read(khataViewModelProvider.notifier).loadEntries();
+
+      final existingEntry = _findKhataEntryByMotorLogId(logId);
+
+      if (existingEntry != null) {
+        _activeMotorLogId = logId;
+        _activeKhataEntry = existingEntry;
+
+        debugPrint("KHATA LOG: Existing Khata session attached.");
+        return;
+      }
+
+      if (_activeMotorLogId == logId && _activeKhataEntry != null) {
+        return;
+      }
+
+      final createdEntry =
+      await ref.read(khataViewModelProvider.notifier).startMotorKhataSession(
+        customerName: customerName,
+        deviceId: deviceId,
+        motorLogId: logId,
+        startTime: openLog.startTime ?? DateTime.now(),
+      );
+
+      _activeMotorLogId = logId;
+      _activeKhataEntry = createdEntry;
+
+      await ref.read(khataViewModelProvider.notifier).loadEntries();
+
+      debugPrint("KHATA LOG: Khata session started for motor log $logId");
+    } catch (e) {
+      debugPrint("KHATA LOG START ERROR: $e");
+    } finally {
+      _khataLogBusy = false;
+    }
+  }
+
+  Future<void> _closeKhataForStoppedLog({
+    required MotorLogResponse? stoppedLog,
+    required String customerName,
+    required String deviceId,
+  }) async {
+    if (_khataLogBusy) return;
+
+    _khataLogBusy = true;
+
+    try {
+      await ref
+          .read(motorLogViewModelProvider.notifier)
+          .loadLogs(deviceId);
+
+      await ref.read(khataViewModelProvider.notifier).loadEntries();
+
+      final logId = stoppedLog?.id ?? _activeMotorLogId;
+
+      KhataEntryModel? entryToClose = _activeKhataEntry;
+
+      if (entryToClose == null && logId != null && logId.trim().isNotEmpty) {
+        entryToClose = _findKhataEntryByMotorLogId(logId);
+      }
+
+      if (entryToClose != null) {
+        final closedEntry =
+        await ref.read(khataViewModelProvider.notifier).closeMotorKhataSession(
+          entry: entryToClose,
+          endTime: stoppedLog?.endTime ?? DateTime.now(),
+        );
+
+        if (closedEntry != null && closedEntry.runHours > 0) {
+          await ref.read(khataViewModelProvider.notifier).updatePriceAndBill(
+            entry: closedEntry,
+            pricePerHour: _defaultPricePerHour,
+            cashReceived: closedEntry.cashReceived,
+          );
+        }
+
+        debugPrint("KHATA LOG: Khata session closed.");
+      } else if (stoppedLog != null) {
+        await ref.read(khataViewModelProvider.notifier).createFromMotorLog(
+          log: stoppedLog,
+          customerName: customerName,
+          deviceId: deviceId,
+          pricePerHour: _defaultPricePerHour,
+          cashReceived: 0,
+        );
+
+        debugPrint("KHATA LOG: Khata created from stopped motor log.");
+      } else {
+        debugPrint("KHATA LOG: No stopped log or active Khata entry found.");
+      }
+
+      await ref
+          .read(motorLogViewModelProvider.notifier)
+          .loadLogs(deviceId);
+
+      await ref.read(khataViewModelProvider.notifier).loadEntries();
+
+      _activeMotorLogId = null;
+      _activeKhataEntry = null;
+    } catch (e) {
+      debugPrint("KHATA LOG CLOSE ERROR: $e");
+    } finally {
+      _khataLogBusy = false;
+    }
+  }
+
+  MotorLogResponse? _latestOpenMotorLog() {
+    final logs = ref.read(motorLogViewModelProvider).logs;
+
+    final openLogs = logs.where((log) {
+      return log.endTime == null && (log.id ?? "").trim().isNotEmpty;
+    }).toList();
+
+    if (openLogs.isEmpty) return null;
+
+    openLogs.sort((a, b) {
+      final aTime = a.startTime ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bTime = b.startTime ?? DateTime.fromMillisecondsSinceEpoch(0);
+
+      return bTime.compareTo(aTime);
+    });
+
+    return openLogs.first;
+  }
+
+  KhataEntryModel? _findKhataEntryByMotorLogId(String motorLogId) {
+    final entries = ref.read(khataViewModelProvider).entries;
+
+    for (final entry in entries) {
+      final entryMotorLogId = _readKhataMotorLogId(entry);
+
+      if (entryMotorLogId == motorLogId) {
+        return entry;
+      }
+    }
+
+    return null;
+  }
+
+  String? _readKhataMotorLogId(KhataEntryModel entry) {
+    try {
+      final dynamic item = entry;
+      final value = item.motorLogId;
+
+      if (value == null) return null;
+
+      final text = value.toString().trim();
+
+      return text.isEmpty ? null : text;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _toggleMotor(bool currentlyRunning) async {
+    customerNameFocusNode.unfocus();
+    FocusScope.of(context).unfocus();
+
+    if (_isProcessingCommand || deviceId == null || deviceId!.trim().isEmpty) {
       return;
     }
 
-    FocusScope.of(context).unfocus();
-    HapticFeedback.mediumImpact();
+    final customerName = customerNameController.text.trim();
 
-    final typedCustomerName = customerNameController.text.trim();
-    final customerName = typedCustomerName.isEmpty ? "Mobile App" : typedCustomerName;
+    if (!currentlyRunning && customerName.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Please enter a customer name"),
+          ),
+        );
+      }
 
-    final motorVm = ref.read(motorViewModelProvider.notifier);
-    final prefs = await SharedPreferences.getInstance();
+      return;
+    }
+
+    setState(() {
+      _isProcessingCommand = true;
+      _optimisticRunning = !currentlyRunning;
+    });
 
     try {
-      if (snapshot.isRunning) {
-        final stoppedRunSeconds = runSeconds <= 0 ? 1 : runSeconds;
-        _ignoreRemoteMotorSyncUntil = DateTime.now().add(const Duration(seconds: 3));
+      final motorVm = ref.read(motorViewModelProvider.notifier);
+      final prefs = await SharedPreferences.getInstance();
 
-        if (mounted) {
-          setState(() => _syncedMotorOn = false);
-        }
+      if (currentlyRunning) {
+        debugPrint("🔴 EXECUTE STOP MOTOR SYSTEM");
 
-        // 🛑 Send Stop Request
-        final stoppedLog = await motorVm.stopMotor(
+        final MotorLogResponse? stoppedLog = await motorVm.stopMotor(
           deviceId: deviceId!,
           customerName: customerName,
         );
 
-        // 📝 SAVE KHATA TRANSITION PIPELINE (Guaranteed Execution)
-        try {
-          if (stoppedLog != null) {
-            await ref.read(khataViewModelProvider.notifier).createFromMotorLog(
-              log: stoppedLog,
-              customerName: customerName,
-              deviceId: deviceId!,
-              pricePerHour: 0,
-              cashReceived: 0,
-              fallbackRunSeconds: stoppedRunSeconds,
-            );
-          } else {
-            await ref.read(khataViewModelProvider.notifier).loadEntries();
-          }
-        } catch (khataError) {
-          debugPrint("⚠️ Khata fast-logging processing failed: $khataError");
-        }
+        await _waitForTelemetryMotorState(expectedRunning: false);
 
-        // Wipe persistent operational fields
-        await prefs.setBool("is_motor_currently_running", false);
+        await ref
+            .read(telemetryViewModelProvider.notifier)
+            .loadLatest(deviceId!);
+
+        await ref
+            .read(motorLogViewModelProvider.notifier)
+            .loadLogs(deviceId!);
+
+        await _closeKhataForStoppedLog(
+          stoppedLog: stoppedLog,
+          customerName: customerName,
+          deviceId: deviceId!,
+        );
+
         await prefs.remove("saved_motor_customer_name");
-        await prefs.remove("motor_start_time_epoch");
 
-        _stopLocalTimer(reset: true);
+        debugPrint("✅ OFF DONE: Motor log closed and Khata saved.");
+      } else {
+        debugPrint("🟢 EXECUTE START MOTOR SYSTEM");
 
-        if (mounted) {
-          customerNameController.clear();
-        }
+        await prefs.setString("saved_motor_customer_name", customerName);
 
-        await loadTelemetry(showError: false, showLoading: false);
-        await ref.read(khataViewModelProvider.notifier).loadEntries();
+        await motorVm.startMotor(
+          deviceId: deviceId!,
+          customerName: customerName,
+        );
 
-        Future.delayed(const Duration(seconds: 3), () {
-          if (!mounted) return;
-          _ignoreRemoteMotorSyncUntil = null;
-          syncMotorStatus();
-        });
+        await _waitForTelemetryMotorState(expectedRunning: true);
 
-        showMessage("Motor stopped. Khata entry created.", false);
-        return;
+        await ref
+            .read(telemetryViewModelProvider.notifier)
+            .loadLatest(deviceId!);
+
+        await ref
+            .read(motorLogViewModelProvider.notifier)
+            .loadLogs(deviceId!);
+
+        await _startKhataForLatestOpenLogIfNeeded(
+          customerName: customerName,
+          deviceId: deviceId!,
+        );
+
+        debugPrint("✅ ON DONE: Motor log opened and Khata session started.");
       }
 
-      // Start validation checks
-      if (typedCustomerName.isEmpty) {
-        showMessage("Customer name is required to start motor.", true);
-        return;
-      }
+      await ref
+          .read(motorLogViewModelProvider.notifier)
+          .loadLogs(deviceId!);
 
-      // 🚨 SAVE TO SHREAD_PREFERENCES FOR APP KILL RECOVERY
-      await prefs.setBool("is_motor_currently_running", true);
-      await prefs.setString("saved_motor_customer_name", typedCustomerName);
-      await prefs.setInt("motor_start_time_epoch", DateTime.now().millisecondsSinceEpoch);
-
-      _ignoreRemoteMotorSyncUntil = DateTime.now().add(const Duration(seconds: 3));
-
-      if (mounted) {
-        setState(() {
-          _syncedMotorOn = true;
-          runSeconds = 0;
-        });
-      }
-
-      await motorVm.startMotor(
-        deviceId: deviceId!,
-        customerName: typedCustomerName,
-      );
-
-      _startLocalTimer();
-      await loadTelemetry(showError: false, showLoading: false);
       await ref.read(khataViewModelProvider.notifier).loadEntries();
 
-      Future.delayed(const Duration(seconds: 3), () {
-        if (!mounted) return;
-        _ignoreRemoteMotorSyncUntil = null;
-        syncMotorStatus();
-      });
-
-      showMessage("Motor started successfully", false);
+      await ref
+          .read(telemetryViewModelProvider.notifier)
+          .loadLatest(deviceId!);
     } catch (e) {
-      _ignoreRemoteMotorSyncUntil = null;
-      showMessage("Motor action failed: ${friendlyError(e.toString())}", true);
-    }
-  }
+      debugPrint("MOTOR TOGGLE ERROR: $e");
 
-  void showMessage(String text, bool isError, {int seconds = 6}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(
-          duration: Duration(seconds: isError ? seconds : 4),
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          backgroundColor: isError ? AppColors.error : AppColors.green,
-          content: Text(
-            isError ? friendlyError(text) : text,
-            style: const TextStyle(color: AppColors.white, fontWeight: FontWeight.w800),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error: ${e.toString()}"),
           ),
-        ),
-      );
-  }
-  /// 🎯 Live Running Status Panel Widget
-  /// Aap isko `HomeScreen` ke andar jahan dil chahe call kar sakte hain: `_buildActiveMotorCard(snapshot)`
-  Widget _buildActiveMotorCard(MotorSnapshot snapshot) {
-    if (!snapshot.isRunning) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1E293B), // Premium Dark Slate Tint
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: AppColors.green.withOpacity(0.4), width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.green.withOpacity(0.12),
-              blurRadius: 20,
-              offset: const Offset(0, 6),
-            )
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Top Zone: Customer Name Label
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Row(
-                  children: [
-                    Icon(Icons.person_outline_rounded, color: Colors.white70, size: 24),
-                    SizedBox(width: 10),
-                    Text(
-                      "Customer Name",
-                      style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-                Text(
-                  _activeRunningName.isEmpty ? "Mobile App" : _activeRunningName,
-                  style: const TextStyle(color: AppColors.green, fontSize: 18, fontWeight: FontWeight.black),
-                ),
-              ],
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 14),
-              child: Divider(color: Colors.white10, height: 1, thickness: 1.5),
-            ),
-            // Bottom Zone: Live Running Counter
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Row(
-                  children: [
-                    Icon(Icons.timer_outlined, color: Colors.white70, size: 24),
-                    SizedBox(width: 10),
-                    Text(
-                      "Running Time",
-                      style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-                Text(
-                  runningTime,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontFamily: 'monospace',
-                    fontWeight: FontWeight.black,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  List<String> customerSuggestions() {
-    if (!hasDevice) return <String>[];
-    final khataState = ref.watch(khataViewModelProvider);
-    final names = <String>{};
-    for (final entry in khataState.entries) {
-      final name = entry.customerName?.trim();
-      if (name != null && name.isNotEmpty) names.add(name);
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessingCommand = false;
+          _optimisticRunning = null;
+        });
+      }
     }
-    return names.toList()..sort();
   }
 
   @override
   Widget build(BuildContext context) {
-    final motorState = ref.watch(motorViewModelProvider);
-    final telemetryState = ref.watch(telemetryViewModelProvider);
+    final telemetry = ref.watch(telemetryViewModelProvider);
+    final latest = telemetry.latest;
 
-    final dynamic latest = hasDevice ? telemetryState.latest : null;
-    final status = connectionStatus(latest);
+    if (latest != null) {
+      final incomingId = latest.id?.toString() ?? latest.createdAt.toString();
 
-    bool finalUiRunningState = false;
-    if (_syncedMotorOn != null) {
-      finalUiRunningState = _syncedMotorOn!;
-    } else if (motorState.commandStatus == MotorCommandStatus.on) {
-      finalUiRunningState = true;
-    } else if (motorState.commandStatus == MotorCommandStatus.off) {
-      finalUiRunningState = false;
-    } else if (status != DeviceConnectionStatus.connected) {
-      finalUiRunningState = telemetrySaysRunning(latest);
+      if (incomingId != _lastSeenPacketId) {
+        _lastSeenPacketId = incomingId;
+        _lastPacketReceivedAt = DateTime.now();
+
+        if (_isWaitingForSync) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _isWaitingForSync = false;
+              });
+            }
+          });
+        }
+      }
     }
 
+    final bool isActuallyRunning = latest != null && latest.statusCode == 1;
+
+    final bool isRunning =
+    (_isProcessingCommand && _optimisticRunning != null)
+        ? _optimisticRunning!
+        : isActuallyRunning;
+
+    String displayRunningTime = "00:00:00";
+
+    if (isRunning && latest?.createdAt != null) {
+      try {
+        final serverStartTime = DateTime.parse(latest!.createdAt.toString());
+        final durationDifference = DateTime.now().difference(serverStartTime);
+
+        if (durationDifference.inSeconds > 0) {
+          displayRunningTime =
+          "${durationDifference.inHours.toString().padLeft(2, '0')}:"
+              "${(durationDifference.inMinutes % 60).toString().padLeft(2, '0')}:"
+              "${(durationDifference.inSeconds % 60).toString().padLeft(2, '0')}";
+        }
+      } catch (_) {
+        displayRunningTime = "Running";
+      }
+    }
+
+    final DeviceConnectionStatus status = _computeStatus(latest);
+
     final snapshot = MotorSnapshot.fromAppState(
-      isRunning: hasDevice && finalUiRunningState,
-      syncedRunning: hasDevice && finalUiRunningState,
+      isRunning: isRunning,
+      isSyncing: _isProcessingCommand,
       latest: latest,
       status: status,
     );
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (snapshot.isRunning && runTimer == null) _startLocalTimer();
-      if (!snapshot.isRunning && runTimer != null) _stopLocalTimer(reset: false);
-    });
-
-    final width = MediaQuery.of(context).size.width;
-    final isVerySmall = width < 360;
-    final isTablet = width >= 650;
-    final isLarge = width >= 1000;
-
-    final horizontalPadding = isLarge ? 38.0 : isTablet ? 30.0 : 16.0;
-    final crossAxisCount = isLarge ? 4 : isTablet ? 3 : 2;
-    final childAspectRatio = isLarge ? 1.36 : isTablet ? 1.22 : 1.02;
-    final buttonSize = isLarge ? 238.0 : isTablet ? 226.0 : isVerySmall ? 176.0 : 196.0;
-
-    final resolvedDisplayName = deviceName != null && deviceName!.isNotEmpty
-        ? deviceName!
-        : (hasDevice ? deviceId! : "Device Not Connected");
-
     return Scaffold(
       backgroundColor: AppColors.darkBgSoft,
-      drawer: hasDevice ? ProfessionalDrawer(deviceId: deviceId!) : null,
       appBar: SmartWellHomeAppBar(
-        hasDevice: hasDevice,
-        displayName: resolvedDisplayName,
+        hasDevice: deviceId != null && deviceId!.isNotEmpty,
+        displayName: deviceName ?? "SmartWell Pump",
         deviceId: deviceId,
         onSelectDevice: () {
-          Navigator.pushReplacementNamed(context, AppRoutes.devices);
+          Navigator.pushReplacementNamed(
+            context,
+            AppRoutes.devices,
+          );
         },
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 40.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // 🛠️ CONTROL ENGINE: HomeDashboardContent runs safely now
-                HomeDashboardContent(
-                  hasDevice: hasDevice,
-                  deviceId: deviceId,
-                  displayName: resolvedDisplayName,
-                  latest: latest,
-                  telemetryState: telemetryState,
-                  motorState: motorState,
-                  snapshot: snapshot,
-                  status: status,
-                  pulseAnimation: pulseAnimation,
-                  // 🎯 DYNAMIC HIDDEN FORM CRITERIA: Passing dummy/empty parameters to hide input field inside layout when running
-                  customerNameController: snapshot.isRunning ? TextEditingController() : customerNameController,
-                  customerNameFocusNode: customerNameFocusNode,
-                  customerSuggestions: customerSuggestions(),
-                  runningTime: runningTime,
-                  horizontalPadding: horizontalPadding,
-                  crossAxisCount: crossAxisCount,
-                  childAspectRatio: childAspectRatio,
-                  buttonSize: buttonSize,
-                  isVerySmall: isVerySmall,
-                  onRefresh: () async {
-                    if (hasDevice) {
-                      await syncMotorStatus();
-                      await loadTelemetry(showError: true, showLoading: false);
-                    } else {
-                      showMessage("Device not connected. Please select a device.", true);
-                    }
-                  },
-                  onMotorTap: () => toggleMotor(snapshot),
-                  formatValue: formatValue,
-                ),
-                _buildActiveMotorCard(),
+      drawer: ProfessionalDrawer(
+        deviceId: deviceId ?? "ESP32_001_TW",
+      ),
+      body: HomeDashboardContent(
+        isSyncing: _isProcessingCommand,
+        onMotorTap: () => _toggleMotor(isActuallyRunning),
+        hasDevice: deviceId != null && deviceId!.isNotEmpty,
+        deviceId: deviceId,
+        displayName: deviceName ?? "SmartWell Pump",
+        latest: latest,
+        telemetryState: telemetry,
+        motorState: ref.watch(motorViewModelProvider),
+        snapshot: snapshot,
+        status: status,
+        pulseAnimation: const AlwaysStoppedAnimation(1.0),
+        customerNameController: customerNameController,
+        customerNameFocusNode: customerNameFocusNode,
+        customerSuggestions: const [],
+        runningTime: displayRunningTime,
+        horizontalPadding: 16,
+        crossAxisCount: 2,
+        childAspectRatio: 1.0,
+        buttonSize: 180,
+        isVerySmall: false,
+        onRefresh: () async {
+          if (deviceId != null && deviceId!.isNotEmpty) {
+            await ref
+                .read(telemetryViewModelProvider.notifier)
+                .loadLatest(deviceId!);
 
-                // 🎯 ME
-              ],
-            ),
-          ),
-        ),
+            await ref
+                .read(motorLogViewModelProvider.notifier)
+                .loadLogs(deviceId!);
+
+            await ref.read(khataViewModelProvider.notifier).loadEntries();
+
+            if (mounted) {
+              setState(() {
+                _lastPacketReceivedAt = DateTime.now();
+              });
+            }
+          }
+        },
+        formatValue: (
+            val,
+            unit, {
+              decimals = 1,
+              required status,
+            }) {
+          return "${val?.toStringAsFixed(decimals) ?? '--'} $unit";
+        },
       ),
     );
   }

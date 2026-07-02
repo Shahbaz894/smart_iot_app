@@ -42,20 +42,37 @@ class KhataApiService {
     required KhataEntryModel entry,
   }) async {
     try {
+      print("========== KHATA REQUEST ==========");
+      print(entry.toJson());
+
       final response = await apiClient.dio.post(
         ApiEndpoints.khata,
         data: entry.toJson(),
       );
 
+      print("========== KHATA RESPONSE ==========");
+      print(response.statusCode);
+      print(response.data);
+
       return KhataEntryModel.fromJson(_asMap(response.data));
     } on DioException catch (e) {
+      print("========== KHATA ERROR ==========");
+      print("Status: ${e.response?.statusCode}");
+      print("Response: ${e.response?.data}");
+
       throw apiClient.handleError(e);
     } on AppException {
       rethrow;
     } catch (e) {
-      throw AppException(message: "Failed to create Khata: ${e.toString()}");
+      print("========== KHATA EXCEPTION ==========");
+      print(e);
+
+      throw AppException(
+        message: "Failed to create Khata: ${e.toString()}",
+      );
     }
   }
+
 
   Future<KhataEntryModel> updateEntry({
     required KhataEntryModel entry,
@@ -67,13 +84,20 @@ class KhataApiService {
         throw AppException(message: "Khata entry ID missing");
       }
 
-      final response = await apiClient.dio.put(
+      final response = await apiClient.dio.patch(
         ApiEndpoints.khataById(id),
         data: entry.toJson(),
       );
 
+
       return KhataEntryModel.fromJson(_asMap(response.data));
     } on DioException catch (e) {
+     // throw apiClient.handleError(e);
+
+      print("========== KHATA UPDATE ERROR ==========");
+      print("STATUS => ${e.response?.statusCode}");
+      print("BODY => ${e.response?.data}");
+      print("URL => ${e.requestOptions.uri}");
       throw apiClient.handleError(e);
     } on AppException {
       rethrow;
