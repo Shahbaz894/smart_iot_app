@@ -1,5 +1,4 @@
 // // //
-// // //
 // // // import "dart:async";
 // // //
 // // // import "package:flutter/material.dart";
@@ -7,29 +6,13 @@
 // // // import "package:flutter_riverpod/flutter_riverpod.dart";
 // // //
 // // // import "package:smart_iot_app/src/core/constant/app_color.dart";
+// // // import "package:smart_iot_app/src/features/khata/data/models/khata_entry_model.dart";
 // // // import "package:smart_iot_app/src/features/widget/custom_drawer.dart";
 // // //
 // // // import "../../../../app/routes.dart";
 // // // import "../../../khata/presentation/providers/ khata_providers.dart";
-// // //
 // // // import "../../../motor/presentation/ providers/motor_providers.dart";
-// // //
 // // // import "../../../telemetry/presentation/providers/telemetry_providers.dart";
-// // //
-// // // import "dart:async";
-// // //
-// // // enum MotorRunSource {
-// // //   none,
-// // //   appButton,
-// // //   physicalButton,
-// // // }
-// // //
-// // // enum DeviceConnectionStatus {
-// // //   noDevice,
-// // //   waitingTelemetry,
-// // //   connected,
-// // //   disconnected,
-// // // }
 // // //
 // // // class HomeScreen extends ConsumerStatefulWidget {
 // // //   final String? deviceId;
@@ -51,22 +34,20 @@
 // // //   final TextEditingController customerNameController = TextEditingController();
 // // //   final FocusNode customerNameFocusNode = FocusNode();
 // // //
-// // //   Timer? runTimer;
+// // //   KhataEntryModel? activeKhataEntry;
+// // //
 // // //   Timer? telemetryTimer;
+// // //   Timer? runTimer;
 // // //
 // // //   int runSeconds = 0;
-// // //   int telemetryFailures = 0;
 // // //
 // // //   String? userId;
 // // //   String? deviceId;
-// // //   String?deviceName;
+// // //   String? deviceName;
 // // //
 // // //   bool didSetupDevice = false;
 // // //   bool isTelemetryLoading = false;
-// // //   bool noDeviceSnackShown = false;
-// // //   bool appMotorOn = false;
-// // //
-// // //   MotorRunSource runSource = MotorRunSource.none;
+// // //   bool firstTelemetryLoaded = false;
 // // //
 // // //   bool get hasDevice => deviceId != null && deviceId!.trim().isNotEmpty;
 // // //
@@ -95,21 +76,22 @@
 // // //
 // // //     if (args is Map) {
 // // //       userId = args["userId"]?.toString();
-// // //       final rawDeviceId = args["deviceId"]?.toString();
-// // //       deviceId = rawDeviceId == null || rawDeviceId.trim().isEmpty
-// // //           ? null
-// // //           : rawDeviceId.trim();
+// // //
+// // //       final rawDeviceId = args["deviceId"]?.toString().trim();
+// // //       if (rawDeviceId != null && rawDeviceId.isNotEmpty) {
+// // //         deviceId = rawDeviceId;
+// // //       }
+// // //
+// // //       final rawDeviceName = args["deviceName"]?.toString().trim();
+// // //       if (rawDeviceName != null && rawDeviceName.isNotEmpty) {
+// // //         deviceName = rawDeviceName;
+// // //       }
 // // //     }
 // // //
 // // //     final widgetDeviceId = widget.deviceId?.trim();
-// // //     deviceId ??= widgetDeviceId == null || widgetDeviceId.isEmpty
-// // //         ? null
-// // //         : widgetDeviceId;
 // // //
-// // //     // 🔥 FIX: Hard safeguard against the placeholder template name.
-// // //     // If the app passes the placeholder name, override it with your working hardware UUID.
-// // //     if (deviceId == "ESP32_001_TW") {
-// // //       deviceId = "7a966ae8-70e1-494b-925a-0754c93064bb";
+// // //     if (!hasDevice && widgetDeviceId != null && widgetDeviceId.isNotEmpty) {
+// // //       deviceId = widgetDeviceId;
 // // //     }
 // // //
 // // //     if (hasDevice) {
@@ -118,37 +100,141 @@
 // // //         await ref.read(khataViewModelProvider.notifier).loadEntries();
 // // //       });
 // // //
+// // //       telemetryTimer?.cancel();
 // // //       telemetryTimer = Timer.periodic(
 // // //         const Duration(seconds: 5),
 // // //             (_) => loadTelemetry(showError: false),
 // // //       );
-// // //     } else {
-// // //       Future.microtask(() {
-// // //         if (!mounted || noDeviceSnackShown) return;
-// // //         noDeviceSnackShown = true;
-// // //         showMessage("Device not connected. Opened dashboard safely.", false);
-// // //       });
 // // //     }
 // // //   }
+// // //
 // // //   @override
 // // //   void dispose() {
 // // //     pulseController.dispose();
 // // //     customerNameController.dispose();
 // // //     customerNameFocusNode.dispose();
-// // //     runTimer?.cancel();
 // // //     telemetryTimer?.cancel();
+// // //     runTimer?.cancel();
 // // //     super.dispose();
 // // //   }
 // // //
-// // //   DeviceConnectionStatus connectionStatus(dynamic latest) {
-// // //     if (!hasDevice) return DeviceConnectionStatus.noDevice;
-// // //     if (latest != null && telemetryFailures < 3) {
-// // //       return DeviceConnectionStatus.connected;
+// // //   int _toInt(dynamic value) {
+// // //     if (value == null) return 0;
+// // //     if (value is int) return value;
+// // //     if (value is double) return value.toInt();
+// // //     if (value is num) return value.toInt();
+// // //     return int.tryParse(value.toString()) ?? 0;
+// // //   }
+// // //
+// // //   bool isDeviceOnline(dynamic latest) {
+// // //     if (!hasDevice) return false;
+// // //     if (latest == null) return false;
+// // //
+// // //     final live = _toInt(latest.isLive) == 1;
+// // //     final fresh = latest.isFresh(withinSeconds: 20);
+// // //
+// // //     return live && fresh;
+// // //   }
+// // //   // bool isDeviceOnline(dynamic latest) {
+// // //   //   if (!hasDevice) return false;
+// // //   //   if (latest == null) return false;
+// // //   //
+// // //   //   return _toInt(latest.isLive) == 1;
+// // //   // }
+// // //
+// // //   // bool isMotorRunning(dynamic latest) {
+// // //   //   if (!hasDevice) return false;
+// // //   //   if (latest == null) return false;
+// // //   //
+// // //   //   final statusCode = _toInt(latest.statusCode);
+// // //   //
+// // //   //   return statusCode == 1 || statusCode == 2;
+// // //   // }
+// // //
+// // //   bool isMotorRunning(dynamic latest) {
+// // //     if (!hasDevice) return false;
+// // //     if (!isDeviceOnline(latest)) return false;
+// // //
+// // //     final statusCode = _toInt(latest.statusCode);
+// // //
+// // //     return statusCode == 1 || statusCode == 2;
+// // //   }
+// // //
+// // //   // Future<void> loadTelemetry({bool showError = false}) async {
+// // //   //   if (!hasDevice) return;
+// // //   //   if (isTelemetryLoading) return;
+// // //   //
+// // //   //   isTelemetryLoading = true;
+// // //   //
+// // //   //   try {
+// // //   //     await ref.read(telemetryViewModelProvider.notifier).loadLatest(deviceId!);
+// // //   //   } catch (e) {
+// // //   //     if (showError) {
+// // //   //       showMessage(
+// // //   //         "Telemetry failed: ${friendlyError(e.toString())}",
+// // //   //         true,
+// // //   //         seconds: 8,
+// // //   //       );
+// // //   //     }
+// // //   //   } finally {
+// // //   //     isTelemetryLoading = false;
+// // //   //   }
+// // //   // }
+// // //   Future<void> loadTelemetry({bool showError = false}) async {
+// // //     if (!hasDevice) return;
+// // //     if (isTelemetryLoading) return;
+// // //
+// // //     final isFirstLoad = !firstTelemetryLoaded;
+// // //
+// // //     isTelemetryLoading = true;
+// // //
+// // //     try {
+// // //       await ref.read(telemetryViewModelProvider.notifier).loadLatest(
+// // //         deviceId!,
+// // //         showLoading: isFirstLoad,
+// // //       );
+// // //     } catch (e) {
+// // //       if (showError) {
+// // //         showMessage(
+// // //           "Telemetry failed: ${friendlyError(e.toString())}",
+// // //           true,
+// // //           seconds: 8,
+// // //         );
+// // //       }
+// // //     } finally {
+// // //       isTelemetryLoading = false;
+// // //
+// // //       if (mounted && isFirstLoad) {
+// // //         setState(() {
+// // //           firstTelemetryLoaded = true;
+// // //         });
+// // //       }
 // // //     }
-// // //     if (telemetryFailures >= 3) {
-// // //       return DeviceConnectionStatus.disconnected;
-// // //     }
-// // //     return DeviceConnectionStatus.waitingTelemetry;
+// // //   }
+// // //
+// // //   void _startLocalTimer() {
+// // //     runTimer?.cancel();
+// // //
+// // //     runTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+// // //       if (!mounted) return;
+// // //
+// // //       setState(() {
+// // //         runSeconds++;
+// // //       });
+// // //     });
+// // //   }
+// // //
+// // //   void _stopLocalTimer() {
+// // //     runTimer?.cancel();
+// // //     runTimer = null;
+// // //   }
+// // //
+// // //   String get runningTime {
+// // //     final seconds = runSeconds <= 0 ? 1 : runSeconds;
+// // //     final h = (seconds ~/ 3600).toString().padLeft(2, "0");
+// // //     final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, "0");
+// // //     final s = (seconds % 60).toString().padLeft(2, "0");
+// // //     return "$h:$m:$s";
 // // //   }
 // // //
 // // //   String friendlyError(String? error) {
@@ -161,9 +247,7 @@
 // // //         text.contains("host lookup") ||
 // // //         text.contains("timeout") ||
 // // //         text.contains("receive timeout") ||
-// // //         text.contains("failed host lookup") ||
-// // //         text.contains("connection refused") ||
-// // //         text.contains("connection failed")) {
+// // //         text.contains("connection refused")) {
 // // //       return "No internet connection. Please check Wi-Fi or mobile data.";
 // // //     }
 // // //
@@ -172,72 +256,33 @@
 // // //     return error!;
 // // //   }
 // // //
-// // //   Future<void> loadTelemetry({bool showError = false}) async {
-// // //     // 1. If a network request is already out, exit immediately to prevent concurrent spamming threads
-// // //     if (isTelemetryLoading) return;
-// // //     if (!hasDevice) return;
-// // //
-// // //     isTelemetryLoading = true;
-// // //
-// // //     try {
-// // //       // 2. Fetch data via Riverpod tracking state engine
-// // //       await ref.read(telemetryViewModelProvider.notifier).loadLatest(deviceId!);
-// // //
-// // //       if (!mounted) return;
-// // //
-// // //       final telemetryState = ref.read(telemetryViewModelProvider);
-// // //
-// // //       if (telemetryState.latest != null) {
-// // //         telemetryFailures = 0;
-// // //       } else if (telemetryState.error != null) {
-// // //         telemetryFailures++;
-// // //       }
-// // //     } catch (_) {
-// // //       telemetryFailures++;
-// // //     } finally {
-// // //       // 3. 🔥 FIX: Clear the loading state lock flag SAFELY within a controlled frame update
-// // //       if (mounted) {
-// // //         setState(() {
-// // //           isTelemetryLoading = false;
-// // //         });
-// // //       }
-// // //     }
-// // //   }
-// // //
-// // //   void _startLocalTimer() {
-// // //     runTimer?.cancel();
-// // //     runTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-// // //       if (mounted) setState(() => runSeconds++);
-// // //     });
-// // //   }
-// // //
-// // //   void _stopLocalTimer() {
-// // //     runTimer?.cancel();
-// // //     runTimer = null;
-// // //   }
-// // //
-// // //   String get runningTime {
-// // //     final seconds = appMotorOn && runSeconds <= 0 ? 1 : runSeconds;
-// // //     final h = (seconds ~/ 3600).toString().padLeft(2, "0");
-// // //     final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, "0");
-// // //     final s = (seconds % 60).toString().padLeft(2, "0");
-// // //     return "$h:$m:$s";
-// // //   }
-// // //
 // // //   String formatValue(
 // // //       double? value,
 // // //       String unit, {
 // // //         int decimals = 1,
-// // //         required DeviceConnectionStatus status,
 // // //       }) {
-// // //     if (status == DeviceConnectionStatus.noDevice) return "-- $unit";
+// // //     if (!hasDevice) return "-- $unit";
 // // //     if (value == null) return "-- $unit";
 // // //     return "${value.toStringAsFixed(decimals)} $unit";
 // // //   }
 // // //
-// // //   Future<void> toggleMotor(MotorSnapshot snapshot) async {
+// // //   Future<void> toggleMotor() async {
 // // //     if (!hasDevice) {
-// // //       showMessage("Device not connected. Please select a device first.", true);
+// // //       showMessage("Please select a device first.", true);
+// // //       return;
+// // //     }
+// // //
+// // //     final latest = ref.read(telemetryViewModelProvider).latest;
+// // //
+// // //     final deviceOnline = isDeviceOnline(latest);
+// // //     final motorRunning = isMotorRunning(latest);
+// // //
+// // //     if (!deviceOnline) {
+// // //       showMessage(
+// // //         "Device is offline. Wait for live telemetry before motor control.",
+// // //         true,
+// // //         seconds: 8,
+// // //       );
 // // //       return;
 // // //     }
 // // //
@@ -245,57 +290,47 @@
 // // //     HapticFeedback.mediumImpact();
 // // //
 // // //     final typedCustomerName = customerNameController.text.trim();
-// // //     final customerName = typedCustomerName.isEmpty ? "Mobile App" : typedCustomerName;
 // // //     final motorVm = ref.read(motorViewModelProvider.notifier);
 // // //
 // // //     try {
-// // //       if (appMotorOn) {
-// // //         final stoppedRunSeconds = runSeconds <= 0 ? 1 : runSeconds;
-// // //
+// // //       if (motorRunning) {
 // // //         final stoppedLog = await motorVm.stopMotor(
 // // //           deviceId: deviceId!,
-// // //           customerName: customerName,
+// // //           customerName: activeKhataEntry?.customerName ??
+// // //               (typedCustomerName.isEmpty ? "Mobile App" : typedCustomerName),
 // // //         );
 // // //
-// // //         final motorState = ref.read(motorViewModelProvider);
-// // //         if (motorState.error != null) {
-// // //           showMessage(motorState.error.toString(), true, seconds: 10);
+// // //         final updatedMotorState = ref.read(motorViewModelProvider);
+// // //
+// // //         if (updatedMotorState.error != null) {
+// // //           showMessage(updatedMotorState.error!, true, seconds: 10);
 // // //           return;
 // // //         }
 // // //
 // // //         _stopLocalTimer();
 // // //
-// // //         setState(() {
-// // //           appMotorOn = false;
-// // //           runSource = MotorRunSource.none;
-// // //           runSeconds = 0;
-// // //         });
+// // //         final endTime = stoppedLog?.endTime ?? DateTime.now();
 // // //
-// // //         if (stoppedLog != null) {
-// // //           await ref.read(khataViewModelProvider.notifier).createFromMotorLog(
-// // //             log: stoppedLog,
-// // //             customerName: customerName,
-// // //             deviceId: deviceId!,
-// // //             pricePerHour: 0,
-// // //             cashReceived: 0,
-// // //             fallbackRunSeconds: stoppedRunSeconds,
+// // //         if (activeKhataEntry != null) {
+// // //           await ref.read(khataViewModelProvider.notifier).closeMotorKhataSession(
+// // //             entry: activeKhataEntry!,
+// // //             endTime: endTime,
 // // //           );
+// // //
+// // //           activeKhataEntry = null;
+// // //         }
+// // //
+// // //         await ref.read(khataViewModelProvider.notifier).loadEntries();
+// // //
+// // //         if (mounted) {
+// // //           setState(() {
+// // //             runSeconds = 0;
+// // //           });
 // // //         }
 // // //
 // // //         await loadTelemetry(showError: false);
-// // //         await ref.read(khataViewModelProvider.notifier).loadEntries();
 // // //
-// // //         final khataState = ref.read(khataViewModelProvider);
-// // //         if (khataState.error != null) {
-// // //           showMessage(
-// // //             "Motor stopped, but Khata was not created: ${khataState.error}",
-// // //             true,
-// // //             seconds: 12,
-// // //           );
-// // //           return;
-// // //         }
-// // //
-// // //         showMessage("Motor stopped. Khata entry created.", false);
+// // //         showMessage("Motor stopped. Khata session closed.", false);
 // // //         return;
 // // //       }
 // // //
@@ -304,27 +339,41 @@
 // // //         return;
 // // //       }
 // // //
-// // //       await motorVm.startMotor(
+// // //       final startedLog = await motorVm.startMotor(
 // // //         deviceId: deviceId!,
 // // //         customerName: typedCustomerName,
 // // //       );
 // // //
-// // //       final motorState = ref.read(motorViewModelProvider);
-// // //       if (motorState.error != null) {
-// // //         showMessage(motorState.error.toString(), true, seconds: 10);
+// // //       final updatedMotorState = ref.read(motorViewModelProvider);
+// // //
+// // //       if (updatedMotorState.error != null) {
+// // //         showMessage(updatedMotorState.error!, true, seconds: 10);
 // // //         return;
 // // //       }
 // // //
-// // //       setState(() {
-// // //         appMotorOn = true;
-// // //         runSource = MotorRunSource.appButton;
-// // //         runSeconds = 0;
-// // //       });
+// // //       if (startedLog != null) {
+// // //         activeKhataEntry =
+// // //         await ref.read(khataViewModelProvider.notifier).startMotorKhataSession(
+// // //           customerName: typedCustomerName,
+// // //           deviceId: deviceId!,
+// // //           motorLogId: startedLog.id ?? "",
+// // //           startTime: startedLog.startTime ?? DateTime.now(),
+// // //         );
+// // //       }
+// // //
+// // //       await ref.read(khataViewModelProvider.notifier).loadEntries();
+// // //
+// // //       if (mounted) {
+// // //         setState(() {
+// // //           runSeconds = 0;
+// // //         });
+// // //       }
 // // //
 // // //       _startLocalTimer();
+// // //
 // // //       await loadTelemetry(showError: false);
 // // //
-// // //       showMessage("Motor started successfully", false);
+// // //       showMessage("Motor started. Khata session opened.", false);
 // // //     } catch (e) {
 // // //       showMessage(
 // // //         "Motor action failed: ${friendlyError(e.toString())}",
@@ -344,7 +393,9 @@
 // // //           duration: Duration(seconds: isError ? seconds : 4),
 // // //           behavior: SnackBarBehavior.floating,
 // // //           margin: const EdgeInsets.all(16),
-// // //           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+// // //           shape: RoundedRectangleBorder(
+// // //             borderRadius: BorderRadius.circular(14),
+// // //           ),
 // // //           backgroundColor: isError ? AppColors.error : AppColors.green,
 // // //           content: Text(
 // // //             isError ? friendlyError(text) : text,
@@ -365,7 +416,9 @@
 // // //
 // // //     for (final entry in khataState.entries) {
 // // //       final name = entry.customerName?.trim();
-// // //       if (name != null && name.isNotEmpty) names.add(name);
+// // //       if (name != null && name.isNotEmpty) {
+// // //         names.add(name);
+// // //       }
 // // //     }
 // // //
 // // //     final list = names.toList();
@@ -375,20 +428,50 @@
 // // //
 // // //   @override
 // // //   Widget build(BuildContext context) {
-// // //     final motorState = ref.watch(motorViewModelProvider);
-// // //     final telemetryState = ref.watch(telemetryViewModelProvider);
-// // //     final latest = hasDevice ? telemetryState.latest : null;
-// // //     final status = connectionStatus(latest);
-// // //
-// // //     final snapshot = MotorSnapshot.fromAppState(
-// // //       appMotorOn: hasDevice && appMotorOn,
-// // //       latest: latest,
-// // //       runSource: runSource,
-// // //       status: status,
+// // //     final latest = ref.watch(
+// // //       telemetryViewModelProvider.select((state) => state.latest),
 // // //     );
 // // //
-// // //     final size = MediaQuery.of(context).size;
-// // //     final width = size.width;
+// // //     final motorLoading = ref.watch(
+// // //       motorViewModelProvider.select((state) => state.isLoading),
+// // //     );
+// // //
+// // //     // final effectiveLatest = hasDevice ? latest : null;
+// // //     //
+// // //     // final deviceOnline = isDeviceOnline(effectiveLatest);
+// // //     // final motorRunning = isMotorRunning(effectiveLatest);
+// // //     // final displayLatest = deviceOnline ? effectiveLatest : null;
+// // //
+// // //
+// // //     //////////////////////
+// // //     final checkingDevice = hasDevice && !firstTelemetryLoaded;
+// // //
+// // //     final effectiveLatest = hasDevice && firstTelemetryLoaded ? latest : null;
+// // //
+// // //     final deviceOnline = checkingDevice ? false : isDeviceOnline(effectiveLatest);
+// // //     final motorRunning = checkingDevice ? false : isMotorRunning(effectiveLatest);
+// // //     final displayLatest = deviceOnline ? effectiveLatest : null;
+// // //
+// // //     if (motorRunning && runTimer == null) {
+// // //       WidgetsBinding.instance.addPostFrameCallback((_) {
+// // //         if (mounted && runTimer == null) {
+// // //           _startLocalTimer();
+// // //         }
+// // //       });
+// // //     }
+// // //
+// // //     if (!motorRunning && runTimer != null) {
+// // //       WidgetsBinding.instance.addPostFrameCallback((_) {
+// // //         if (mounted && runTimer != null) {
+// // //           _stopLocalTimer();
+// // //           setState(() {
+// // //             runSeconds = 0;
+// // //           });
+// // //         }
+// // //       });
+// // //     }
+// // //
+// // //     final width = MediaQuery.of(context).size.width;
 // // //
 // // //     final isVerySmall = width < 360;
 // // //     final isTablet = width >= 650;
@@ -420,217 +503,173 @@
 // // //         ? 176.0
 // // //         : 196.0;
 // // //
+// // //     final resolvedDisplayName = deviceName != null && deviceName!.isNotEmpty
+// // //         ? deviceName!
+// // //         : hasDevice
+// // //         ? deviceId!
+// // //         : "Smart Motor Controller";
+// // //
 // // //     return Scaffold(
 // // //       backgroundColor: AppColors.darkBgSoft,
 // // //       drawer: hasDevice ? ProfessionalDrawer(deviceId: deviceId!) : null,
-// // //       appBar: AppBar(
-// // //         backgroundColor: AppColors.darkSurfaceSoft,
-// // //         elevation: 0,
-// // //         centerTitle: true,
-// // //         iconTheme: const IconThemeData(color: AppColors.white),
-// // //         title: Column(
-// // //           mainAxisSize: MainAxisSize.min,
-// // //           children: [
-// // //             Text(
-// // //               "SmartWell VFD",
-// // //               maxLines: 1,
-// // //               overflow: TextOverflow.ellipsis,
-// // //               style: TextStyle(
-// // //                 color: AppColors.white,
-// // //                 fontSize: isVerySmall ? 18 : 21,
-// // //                 fontWeight: FontWeight.w900,
-// // //               ),
-// // //             ),
-// // //             const SizedBox(height: 2),
-// // //             Text(
-// // //               hasDevice ? deviceId! : "Device not connected",
-// // //               maxLines: 1,
-// // //               overflow: TextOverflow.ellipsis,
-// // //               style: TextStyle(
-// // //                 color: status == DeviceConnectionStatus.connected
-// // //                     ? AppColors.primary.withOpacity(0.88)
-// // //                     : AppColors.warning,
-// // //                 fontSize: isVerySmall ? 10 : 11,
-// // //                 fontWeight: FontWeight.w700,
-// // //               ),
-// // //             ),
-// // //           ],
-// // //         ),
-// // //         actions: [
-// // //           IconButton(
-// // //             tooltip: "Change device",
-// // //             onPressed: () {
-// // //               Navigator.pushReplacementNamed(context, AppRoutes.devices);
-// // //             },
-// // //             icon: const Icon(Icons.devices_other_rounded),
-// // //           ),
-// // //         ],
+// // //       appBar: SmartWellHomeAppBar(
+// // //         hasDevice: hasDevice,
+// // //         deviceOnline: deviceOnline,
+// // //         onSelectDevice: () {
+// // //           Navigator.pushReplacementNamed(context, AppRoutes.devices);
+// // //         },
 // // //       ),
 // // //       body: SafeArea(
 // // //         child: RefreshIndicator(
+// // //           color: AppColors.primary,
+// // //           backgroundColor: AppColors.cardDark,
 // // //           onRefresh: () async {
 // // //             if (hasDevice) {
-// // //               await loadTelemetry();
+// // //               await loadTelemetry(showError: true);
 // // //             } else {
-// // //               showMessage("Device not connected. Please select a device.", true);
+// // //               showMessage("Please select a device first.", true);
 // // //             }
 // // //           },
-// // //           color: AppColors.primary,
-// // //           backgroundColor: AppColors.surfaceDark,
 // // //           child: SingleChildScrollView(
-// // //             physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-// // //             padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 18),
+// // //             physics: const AlwaysScrollableScrollPhysics(
+// // //               parent: BouncingScrollPhysics(),
+// // //             ),
+// // //             padding: EdgeInsets.symmetric(
+// // //               horizontal: horizontalPadding,
+// // //               vertical: 18,
+// // //             ),
 // // //             child: Center(
 // // //               child: ConstrainedBox(
 // // //                 constraints: const BoxConstraints(maxWidth: 1080),
 // // //                 child: Column(
 // // //                   crossAxisAlignment: CrossAxisAlignment.stretch,
 // // //                   children: [
-// // //                     VfdHeaderCard(
+// // //                     SmartDeviceHeaderCard(
+// // //                       hasDevice: hasDevice,
+// // //                       deviceOnline: deviceOnline,
+// // //                       motorRunning: motorRunning,
+// // //                       displayName: resolvedDisplayName,
 // // //                       deviceId: deviceId,
-// // //                       snapshot: snapshot,
-// // //                       frequencyText: formatValue(
-// // //                         latest?.freq,
-// // //                         "Hz",
-// // //                         decimals: 1,
-// // //                         status: status,
-// // //                       ),
-// // //                       referenceFrequencyText: formatValue(
-// // //                         latest?.referenceFreq ?? latest?.freq,
-// // //                         "Hz",
-// // //                         decimals: 1,
-// // //                         status: status,
-// // //                       ),
 // // //                     ),
-// // //                     if (status == DeviceConnectionStatus.noDevice)
-// // //                       const Padding(
-// // //                         padding: EdgeInsets.only(top: 10),
-// // //                         child: DeviceNotConnectedBadge(),
+// // //                     if (!hasDevice) ...[
+// // //                       const SizedBox(height: 12),
+// // //                       NoDeviceProfessionalNotice(
+// // //                         onSelectDevice: () {
+// // //                           Navigator.pushReplacementNamed(
+// // //                             context,
+// // //                             AppRoutes.devices,
+// // //                           );
+// // //                         },
 // // //                       ),
-// // //                     if (status == DeviceConnectionStatus.waitingTelemetry)
-// // //                       const Padding(
-// // //                         padding: EdgeInsets.only(top: 10),
-// // //                         child: WaitingTelemetryBadge(),
+// // //                     ],
+// // //                     if (hasDevice && !deviceOnline) ...[
+// // //                       const SizedBox(height: 12),
+// // //                       DeviceOfflineNotice(
+// // //                         onRetry: () => loadTelemetry(showError: true),
 // // //                       ),
-// // //                     if (status == DeviceConnectionStatus.disconnected)
-// // //                       const Padding(
-// // //                         padding: EdgeInsets.only(top: 10),
-// // //                         child: DeviceDisconnectedBadge(),
+// // //                     ],
+// // //                     if (hasDevice && deviceOnline) ...[
+// // //                       const SizedBox(height: 12),
+// // //                       DeviceOnlineNotice(
+// // //                         motorRunning: motorRunning,
 // // //                       ),
-// // //                     const SizedBox(height: 16),
-// // //                     StatusPanel(snapshot: snapshot, pulseAnimation: pulseAnimation),
-// // //                     const SizedBox(height: 16),
-// // //                     SystemBanner(snapshot: snapshot),
-// // //                     if (snapshot.hasFault && !snapshot.hasTelemetryError) ...[
-// // //                       const SizedBox(height: 14),
-// // //                       FaultAlertCard(snapshot: snapshot),
 // // //                     ],
 // // //                     const SizedBox(height: 18),
-// // //                     CustomerNameField(
+// // //                     CustomerNameInputCard(
 // // //                       controller: customerNameController,
 // // //                       focusNode: customerNameFocusNode,
 // // //                       suggestions: customerSuggestions(),
-// // //                       enabled: hasDevice,
+// // //                       enabled: hasDevice && deviceOnline,
 // // //                     ),
 // // //                     const SizedBox(height: 26),
 // // //                     Center(
 // // //                       child: GestureDetector(
-// // //                         onTap: motorState.isLoading ? null : () => toggleMotor(snapshot),
+// // //                         onTap: motorLoading ? null : toggleMotor,
 // // //                         child: AnimatedBuilder(
 // // //                           animation: pulseAnimation,
 // // //                           builder: (context, child) {
-// // //                             final scale = snapshot.isRunning
+// // //                             final scale = motorRunning
 // // //                                 ? 1.0 + ((pulseAnimation.value - 1.0) * 0.28)
 // // //                                 : 1.0;
-// // //                             return Transform.scale(scale: scale, child: child);
+// // //
+// // //                             return Transform.scale(
+// // //                               scale: scale,
+// // //                               child: child,
+// // //                             );
 // // //                           },
-// // //                           child: MotorButton(
-// // //                             snapshot: snapshot,
-// // //                             loading: hasDevice && motorState.isLoading,
+// // //                           child: MotorCommandButton(
+// // //                             hasDevice: hasDevice,
+// // //                             deviceOnline: deviceOnline,
+// // //                             isOn: motorRunning,
+// // //                             loading: hasDevice && motorLoading,
 // // //                             size: buttonSize,
 // // //                           ),
 // // //                         ),
 // // //                       ),
 // // //                     ),
 // // //                     const SizedBox(height: 18),
-// // //                     Center(
-// // //                       child: Text(
-// // //                         snapshot.isRunning
-// // //                             ? "${snapshot.runSourceText} | $runningTime"
-// // //                             : snapshot.centerStatusText,
-// // //                         textAlign: TextAlign.center,
-// // //                         style: TextStyle(
-// // //                           color: AppColors.white.withOpacity(0.76),
-// // //                           fontSize: isVerySmall ? 14 : 16,
-// // //                           fontWeight: FontWeight.w700,
-// // //                         ),
-// // //                       ),
+// // //                     MotorCommandStatusText(
+// // //                       hasDevice: hasDevice,
+// // //                       deviceOnline: deviceOnline,
+// // //                       isOn: motorRunning,
+// // //                       runningTime: runningTime,
 // // //                     ),
 // // //                     const SizedBox(height: 22),
-// // //                     if (hasDevice && telemetryState.isLoading && latest == null)
-// // //                       const Padding(
-// // //                         padding: EdgeInsets.all(22),
-// // //                         child: Center(
-// // //                           child: CircularProgressIndicator(color: AppColors.white),
-// // //                         ),
-// // //                       ),
-// // //                     const SizedBox(height: 14),
-// // //                     GridView.count(
-// // //                       shrinkWrap: true,
-// // //                       physics: const NeverScrollableScrollPhysics(),
+// // //                     ParameterGridSection(
 // // //                       crossAxisCount: crossAxisCount,
-// // //                       crossAxisSpacing: 14,
-// // //                       mainAxisSpacing: 14,
 // // //                       childAspectRatio: childAspectRatio,
-// // //                       children: [
-// // //                         MetricCard(
+// // //                       metrics: [
+// // //                         ParameterMetric(
 // // //                           icon: Icons.sync_rounded,
 // // //                           title: "Frequency",
-// // //                           value: formatValue(latest?.freq, "Hz", status: status),
+// // //                           value: formatValue(displayLatest?.freq, "Hz"),
 // // //                           highlight: true,
 // // //                         ),
-// // //                         MetricCard(
+// // //                         ParameterMetric(
 // // //                           icon: Icons.bolt_rounded,
 // // //                           title: "Voltage",
-// // //                           value: formatValue(latest?.voltage, "V", status: status),
+// // //                           value: formatValue(displayLatest?.voltage, "V"),
 // // //                         ),
-// // //                         MetricCard(
+// // //                         ParameterMetric(
 // // //                           icon: Icons.flash_on_rounded,
 // // //                           title: "Current",
-// // //                           value: formatValue(latest?.current, "A", status: status),
+// // //                           value: formatValue(displayLatest?.current, "A"),
 // // //                         ),
-// // //                         MetricCard(
+// // //                         ParameterMetric(
 // // //                           icon: Icons.power_rounded,
 // // //                           title: "Power",
-// // //                           value: formatValue(latest?.power, "kW", status: status),
+// // //                           value: formatValue(displayLatest?.power, "kW"),
 // // //                         ),
-// // //                         MetricCard(
+// // //                         ParameterMetric(
 // // //                           icon: Icons.speed_rounded,
 // // //                           title: "Load",
-// // //                           value: formatValue(latest?.powerPercent, "%", status: status),
+// // //                           value: formatValue(
+// // //                             displayLatest?.powerPercent,
+// // //                             "%",
+// // //                           ),
 // // //                         ),
-// // //                         MetricCard(
+// // //                         ParameterMetric(
 // // //                           icon: Icons.rotate_right_rounded,
 // // //                           title: "Motor Speed",
-// // //                           value: formatValue(latest?.motorSpeed, "RPM", status: status),
+// // //                           value: formatValue(
+// // //                             displayLatest?.motorSpeed,
+// // //                             "RPM",
+// // //                           ),
 // // //                         ),
-// // //                         MetricCard(
+// // //                         ParameterMetric(
 // // //                           icon: Icons.battery_charging_full_rounded,
 // // //                           title: "DC Bus",
-// // //                           value: formatValue(latest?.dcbus, "V", status: status),
+// // //                           value: formatValue(displayLatest?.dcbus, "V"),
 // // //                         ),
-// // //                         MetricCard(
+// // //                         ParameterMetric(
 // // //                           icon: Icons.electric_meter_rounded,
 // // //                           title: "Energy",
-// // //                           value: formatValue(latest?.energyIn, "kWh", status: status),
+// // //                           value: formatValue(
+// // //                             displayLatest?.energyIn,
+// // //                             "kWh",
+// // //                           ),
 // // //                         ),
 // // //                       ],
-// // //                     ),
-// // //                     const SizedBox(height: 20),
-// // //                     DeviceSessionCard(
-// // //                       deviceId: deviceId,
-// // //                       snapshot: snapshot,
-// // //                       timestamp: latest?.timestamp,
 // // //                     ),
 // // //                   ],
 // // //                 ),
@@ -643,268 +682,172 @@
 // // //   }
 // // // }
 // // //
-// // // class MotorSnapshot {
-// // //   final bool isRunning;
-// // //   final bool hasFault;
-// // //   final bool hasTelemetryError;
-// // //   final int? statusCode;
-// // //   final int? faultCode;
-// // //   final int? isLive;
-// // //   final MotorRunSource runSource;
-// // //   final DeviceConnectionStatus connectionStatus;
+// // // class SmartWellHomeAppBar extends StatelessWidget
+// // //     implements PreferredSizeWidget {
+// // //   final bool hasDevice;
+// // //   final bool deviceOnline;
+// // //   final VoidCallback onSelectDevice;
 // // //
-// // //   const MotorSnapshot({
-// // //     required this.isRunning,
-// // //     required this.hasFault,
-// // //     required this.hasTelemetryError,
-// // //     required this.statusCode,
-// // //     required this.faultCode,
-// // //     required this.isLive,
-// // //     required this.runSource,
-// // //     required this.connectionStatus,
+// // //   const SmartWellHomeAppBar({
+// // //     super.key,
+// // //     required this.hasDevice,
+// // //     required this.deviceOnline,
+// // //     required this.onSelectDevice,
 // // //   });
 // // //
-// // //   bool get hasDevice => connectionStatus != DeviceConnectionStatus.noDevice;
+// // //   @override
+// // //   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 // // //
-// // //   factory MotorSnapshot.fromAppState({
-// // //     required bool appMotorOn,
-// // //     required dynamic latest,
-// // //     required MotorRunSource runSource,
-// // //     required DeviceConnectionStatus status,
-// // //   }) {
-// // //     final int? statusCode = latest?.statusCode;
-// // //     final int? faultCode = latest?.faultCode;
-// // //     final int? fault = latest?.fault;
-// // //     final int? isLive = latest?.isLive;
+// // //   @override
+// // //   Widget build(BuildContext context) {
+// // //     final statusText = !hasDevice
+// // //         ? "No device selected"
+// // //         : deviceOnline
+// // //         ? "Device online"
+// // //         : "Waiting for device";
 // // //
-// // //     final hasFault = status == DeviceConnectionStatus.connected &&
-// // //         ((fault ?? 0) == 1 || (faultCode ?? 0) > 0 || statusCode == 4);
+// // //     final statusColor = !hasDevice
+// // //         ? AppColors.white.withOpacity(0.55)
+// // //         : deviceOnline
+// // //         ? AppColors.green
+// // //         : AppColors.warning;
 // // //
-// // //     final resolvedSource = appMotorOn
-// // //         ? (runSource == MotorRunSource.none ? MotorRunSource.appButton : runSource)
-// // //         : MotorRunSource.none;
-// // //
-// // //     return MotorSnapshot(
-// // //       isRunning: status == DeviceConnectionStatus.connected && appMotorOn,
-// // //       hasFault: hasFault,
-// // //       hasTelemetryError: status == DeviceConnectionStatus.disconnected,
-// // //       statusCode: latest == null ? null : statusCode,
-// // //       faultCode: latest == null ? null : faultCode,
-// // //       isLive: latest == null ? null : isLive,
-// // //       runSource: resolvedSource,
-// // //       connectionStatus: status,
+// // //     return AppBar(
+// // //       backgroundColor: AppColors.primaryDark,
+// // //       elevation: 0,
+// // //       centerTitle: false,
+// // //       automaticallyImplyLeading: hasDevice,
+// // //       iconTheme: const IconThemeData(color: AppColors.white),
+// // //       titleSpacing: 18,
+// // //       title: Row(
+// // //         children: [
+// // //           Container(
+// // //             height: 42,
+// // //             width: 42,
+// // //             decoration: BoxDecoration(
+// // //               borderRadius: BorderRadius.circular(14),
+// // //               gradient: LinearGradient(
+// // //                 colors: [
+// // //                   AppColors.darkBgSoft,
+// // //                   AppColors.darkBgSoft.withOpacity(0.72),
+// // //                 ],
+// // //               ),
+// // //             ),
+// // //             child: const Icon(
+// // //               Icons.electric_bolt_rounded,
+// // //               color: AppColors.white,
+// // //               size: 24,
+// // //             ),
+// // //           ),
+// // //           const SizedBox(width: 14),
+// // //           Expanded(
+// // //             child: Column(
+// // //               crossAxisAlignment: CrossAxisAlignment.start,
+// // //               mainAxisSize: MainAxisSize.min,
+// // //               children: [
+// // //                 const Text(
+// // //                   "AabNex",
+// // //                   maxLines: 1,
+// // //                   overflow: TextOverflow.ellipsis,
+// // //                   style: TextStyle(
+// // //                     color: AppColors.white,
+// // //                     fontSize: 20,
+// // //                     fontWeight: FontWeight.w900,
+// // //                   ),
+// // //                 ),
+// // //                 const SizedBox(height: 2),
+// // //                 Text(
+// // //                   statusText,
+// // //                   maxLines: 1,
+// // //                   overflow: TextOverflow.ellipsis,
+// // //                   style: TextStyle(
+// // //                     color: statusColor,
+// // //                     fontSize: 11.5,
+// // //                     fontWeight: FontWeight.w800,
+// // //                   ),
+// // //                 ),
+// // //               ],
+// // //             ),
+// // //           ),
+// // //         ],
+// // //       ),
+// // //       actions: [
+// // //         Padding(
+// // //           padding: const EdgeInsets.only(right: 10),
+// // //           child: IconButton(
+// // //             tooltip: "Select Device",
+// // //             onPressed: onSelectDevice,
+// // //             icon: Container(
+// // //               padding: const EdgeInsets.all(10),
+// // //               decoration: BoxDecoration(
+// // //                 color: AppColors.cardDark,
+// // //                 borderRadius: BorderRadius.circular(14),
+// // //                 border: Border.all(color: AppColors.borderDark),
+// // //               ),
+// // //               child: const Icon(
+// // //                 Icons.devices_other_rounded,
+// // //                 color: AppColors.primary,
+// // //                 size: 22,
+// // //               ),
+// // //             ),
+// // //           ),
+// // //         ),
+// // //       ],
 // // //     );
-// // //   }
-// // //
-// // //   String get statusName {
-// // //     switch (connectionStatus) {
-// // //       case DeviceConnectionStatus.noDevice:
-// // //         return "Device Not Connected";
-// // //       case DeviceConnectionStatus.waitingTelemetry:
-// // //         return "Waiting for Telemetry";
-// // //       case DeviceConnectionStatus.disconnected:
-// // //         return "Device Disconnected";
-// // //       case DeviceConnectionStatus.connected:
-// // //         break;
-// // //     }
-// // //
-// // //     if (hasFault) return "Fault Active";
-// // //     if (isRunning && statusCode == 1) return "Forward Running";
-// // //     if (isRunning && statusCode == 2) return "Reverse Running";
-// // //     if (isRunning) return "VFD Running";
-// // //     if (statusCode == 3) return "Standby";
-// // //     if (statusCode == 5) return "VFD Off";
-// // //     return "System Ready";
-// // //   }
-// // //
-// // //   String get centerStatusText {
-// // //     switch (connectionStatus) {
-// // //       case DeviceConnectionStatus.noDevice:
-// // //         return "Device not connected";
-// // //       case DeviceConnectionStatus.waitingTelemetry:
-// // //         return "Waiting for live readings";
-// // //       case DeviceConnectionStatus.disconnected:
-// // //         return "Device disconnected";
-// // //       case DeviceConnectionStatus.connected:
-// // //         break;
-// // //     }
-// // //
-// // //     if (hasFault) return faultName;
-// // //     if (isRunning) return runSourceText;
-// // //     if (statusCode == 5) return "VFD Off";
-// // //     return "System Ready";
-// // //   }
-// // //
-// // //   String get runSourceText {
-// // //     if (!isRunning) return "Stopped";
-// // //     if (runSource == MotorRunSource.appButton) return "Run by App Button";
-// // //     if (runSource == MotorRunSource.physicalButton) return "Run by Physical Button";
-// // //     return "Running";
-// // //   }
-// // //
-// // //   Color get bannerColor {
-// // //     switch (connectionStatus) {
-// // //       case DeviceConnectionStatus.noDevice:
-// // //         return AppColors.warning;
-// // //       case DeviceConnectionStatus.waitingTelemetry:
-// // //         return AppColors.primary;
-// // //       case DeviceConnectionStatus.disconnected:
-// // //         return AppColors.warning;
-// // //       case DeviceConnectionStatus.connected:
-// // //         break;
-// // //     }
-// // //
-// // //     if (hasFault) return AppColors.error;
-// // //     if (isRunning && runSource == MotorRunSource.physicalButton) return AppColors.accent;
-// // //     if (isRunning) return AppColors.green;
-// // //     if (statusCode == 5) return AppColors.blueDark;
-// // //     return AppColors.primary;
-// // //   }
-// // //
-// // //   IconData get bannerIcon {
-// // //     switch (connectionStatus) {
-// // //       case DeviceConnectionStatus.noDevice:
-// // //         return Icons.link_off_rounded;
-// // //       case DeviceConnectionStatus.waitingTelemetry:
-// // //         return Icons.sync_rounded;
-// // //       case DeviceConnectionStatus.disconnected:
-// // //         return Icons.wifi_off_rounded;
-// // //       case DeviceConnectionStatus.connected:
-// // //         break;
-// // //     }
-// // //
-// // //     if (hasFault) return Icons.warning_amber_rounded;
-// // //     if (isRunning && runSource == MotorRunSource.physicalButton) {
-// // //       return Icons.radio_button_checked_rounded;
-// // //     }
-// // //     if (isRunning) return Icons.check_circle_rounded;
-// // //     if (statusCode == 5) return Icons.power_off_rounded;
-// // //     return Icons.verified_rounded;
-// // //   }
-// // //
-// // //   String get faultName {
-// // //     switch (faultCode ?? 0) {
-// // //       case 0:
-// // //         return "No Fault";
-// // //       case 1:
-// // //         return "OUT1";
-// // //       case 2:
-// // //         return "OUT2";
-// // //       case 3:
-// // //         return "OUT3";
-// // //       case 4:
-// // //         return "OC1";
-// // //       case 5:
-// // //         return "OC2";
-// // //       case 6:
-// // //         return "OC3";
-// // //       case 7:
-// // //         return "OV1";
-// // //       case 8:
-// // //         return "OV2";
-// // //       case 9:
-// // //         return "OV3";
-// // //       case 10:
-// // //         return "UV";
-// // //       case 11:
-// // //         return "OL1";
-// // //       case 12:
-// // //         return "OL2";
-// // //       case 13:
-// // //         return "SPI";
-// // //       case 14:
-// // //         return "SPO";
-// // //       case 15:
-// // //         return "OH1";
-// // //       case 16:
-// // //         return "OH2";
-// // //       case 17:
-// // //         return "EF";
-// // //       case 18:
-// // //         return "CE";
-// // //       case 19:
-// // //         return "ItE";
-// // //       default:
-// // //         return "Unknown Fault";
-// // //     }
-// // //   }
-// // //
-// // //   String get faultDescription {
-// // //     switch (faultCode ?? 0) {
-// // //       case 0:
-// // //         return "Drive operating normally.";
-// // //       case 1:
-// // //         return "Output phase fault. Check motor cable, output terminal, or missing motor phase.";
-// // //       case 2:
-// // //         return "Output abnormality. Check motor short circuit or output wiring.";
-// // //       case 3:
-// // //         return "Output phase imbalance. Check open phase or motor winding damage.";
-// // //       case 4:
-// // //         return "Acceleration overcurrent. Check acceleration time, heavy load, or jammed motor.";
-// // //       case 5:
-// // //         return "Deceleration overcurrent. Check deceleration time or high inertia load.";
-// // //       case 6:
-// // //         return "Constant speed overcurrent. Check mechanical overload or motor current.";
-// // //       case 7:
-// // //         return "Acceleration overvoltage. DC bus voltage is too high during acceleration.";
-// // //       case 8:
-// // //         return "Deceleration overvoltage. Check fast deceleration or braking resistor.";
-// // //       case 9:
-// // //         return "Constant overvoltage. Check supply voltage.";
-// // //       case 10:
-// // //         return "Under voltage. Check weak supply or loose input cable.";
-// // //       case 11:
-// // //         return "Motor overload. Current stayed too high for long duration.";
-// // //       case 12:
-// // //         return "Drive overload. Load may exceed VFD capacity.";
-// // //       case 13:
-// // //         return "Internal communication fault.";
-// // //       case 14:
-// // //         return "Output protection triggered.";
-// // //       case 15:
-// // //         return "Drive overheat. Check cooling fan and ventilation.";
-// // //       case 16:
-// // //         return "Motor overheat. Motor thermal protection triggered.";
-// // //       case 17:
-// // //         return "External fault. External safety device triggered.";
-// // //       case 18:
-// // //         return "Communication error.";
-// // //       case 19:
-// // //         return "Current detection error.";
-// // //       default:
-// // //         return "Unknown fault code.";
-// // //     }
 // // //   }
 // // // }
 // // //
-// // // class VfdHeaderCard extends StatelessWidget {
+// // // class SmartDeviceHeaderCard extends StatelessWidget {
+// // //   final bool hasDevice;
+// // //   final bool deviceOnline;
+// // //   final bool motorRunning;
+// // //   final String displayName;
 // // //   final String? deviceId;
-// // //   final MotorSnapshot snapshot;
-// // //   final String frequencyText;
-// // //   final String referenceFrequencyText;
 // // //
-// // //   const VfdHeaderCard({
+// // //   const SmartDeviceHeaderCard({
 // // //     super.key,
+// // //     required this.hasDevice,
+// // //     required this.deviceOnline,
+// // //     required this.motorRunning,
+// // //     required this.displayName,
 // // //     required this.deviceId,
-// // //     required this.snapshot,
-// // //     required this.frequencyText,
-// // //     required this.referenceFrequencyText,
 // // //   });
 // // //
 // // //   @override
 // // //   Widget build(BuildContext context) {
-// // //     final width = MediaQuery.of(context).size.width;
-// // //     final compact = width < 390;
+// // //     final color = !hasDevice
+// // //         ? AppColors.primary
+// // //         : !deviceOnline
+// // //         ? AppColors.warning
+// // //         : motorRunning
+// // //         ? AppColors.green
+// // //         : AppColors.primary;
+// // //
+// // //     final icon = !hasDevice
+// // //         ? Icons.hub_outlined
+// // //         : !deviceOnline
+// // //         ? Icons.wifi_tethering_error_rounded
+// // //         : motorRunning
+// // //         ? Icons.power_settings_new_rounded
+// // //         : Icons.verified_rounded;
+// // //
+// // //     final statusText = !hasDevice
+// // //         ? "Ready to connect"
+// // //         : !deviceOnline
+// // //         ? "Waiting for live telemetry"
+// // //         : motorRunning
+// // //         ? "Device online | Motor ON"
+// // //         : "Device online | Motor OFF";
 // // //
 // // //     return Container(
-// // //       padding: EdgeInsets.all(compact ? 15 : 18),
+// // //       padding: const EdgeInsets.all(18),
 // // //       decoration: BoxDecoration(
 // // //         color: AppColors.cardDark,
 // // //         borderRadius: BorderRadius.circular(26),
 // // //         border: Border.all(color: AppColors.borderDark),
 // // //         boxShadow: [
 // // //           BoxShadow(
-// // //             color: AppColors.primary.withOpacity(0.10),
+// // //             color: color.withOpacity(0.10),
 // // //             blurRadius: 28,
 // // //             offset: const Offset(0, 14),
 // // //           ),
@@ -913,16 +856,16 @@
 // // //       child: Row(
 // // //         children: [
 // // //           Container(
-// // //             height: compact ? 54 : 62,
-// // //             width: compact ? 54 : 62,
+// // //             height: 62,
+// // //             width: 62,
 // // //             decoration: BoxDecoration(
-// // //               color: snapshot.bannerColor.withOpacity(0.14),
+// // //               color: color.withOpacity(0.14),
 // // //               borderRadius: BorderRadius.circular(20),
 // // //             ),
 // // //             child: Icon(
-// // //               snapshot.bannerIcon,
-// // //               color: snapshot.bannerColor,
-// // //               size: compact ? 28 : 32,
+// // //               icon,
+// // //               color: color,
+// // //               size: 32,
 // // //             ),
 // // //           ),
 // // //           const SizedBox(width: 14),
@@ -931,165 +874,56 @@
 // // //               crossAxisAlignment: CrossAxisAlignment.start,
 // // //               children: [
 // // //                 Text(
-// // //                   snapshot.hasDevice ? deviceId! : "Device Not Connected",
+// // //                   displayName,
 // // //                   maxLines: 1,
 // // //                   overflow: TextOverflow.ellipsis,
-// // //                   style: TextStyle(
+// // //                   style: const TextStyle(
 // // //                     color: AppColors.white,
-// // //                     fontSize: compact ? 15 : 17,
+// // //                     fontSize: 17,
 // // //                     fontWeight: FontWeight.w900,
 // // //                   ),
 // // //                 ),
 // // //                 const SizedBox(height: 6),
 // // //                 Text(
-// // //                   snapshot.statusName,
+// // //                   statusText,
+// // //                   style: TextStyle(
+// // //                     color: color,
+// // //                     fontSize: 14,
+// // //                     fontWeight: FontWeight.w800,
+// // //                   ),
+// // //                 ),
+// // //                 const SizedBox(height: 5),
+// // //                 Text(
+// // //                   hasDevice ? deviceId! : "No controller selected",
 // // //                   maxLines: 1,
 // // //                   overflow: TextOverflow.ellipsis,
 // // //                   style: TextStyle(
-// // //                     color: snapshot.bannerColor,
-// // //                     fontSize: compact ? 12.5 : 14,
-// // //                     fontWeight: FontWeight.w800,
+// // //                     color: AppColors.white.withOpacity(0.45),
+// // //                     fontSize: 11,
+// // //                     fontWeight: FontWeight.w700,
 // // //                   ),
 // // //                 ),
 // // //               ],
 // // //             ),
 // // //           ),
-// // //           const SizedBox(width: 10),
-// // //           Column(
-// // //             crossAxisAlignment: CrossAxisAlignment.end,
-// // //             children: [
-// // //               Text(
-// // //                 "Frequency",
-// // //                 style: TextStyle(
-// // //                   color: AppColors.white.withOpacity(0.62),
-// // //                   fontSize: compact ? 11 : 12,
-// // //                   fontWeight: FontWeight.w700,
-// // //                 ),
-// // //               ),
-// // //               const SizedBox(height: 5),
-// // //               Text(
-// // //                 frequencyText,
-// // //                 style: TextStyle(
-// // //                   color: AppColors.white,
-// // //                   fontSize: compact ? 19 : 23,
-// // //                   fontWeight: FontWeight.w900,
-// // //                 ),
-// // //               ),
-// // //               const SizedBox(height: 4),
-// // //               Text(
-// // //                 "Ref $referenceFrequencyText",
-// // //                 style: TextStyle(
-// // //                   color: AppColors.white.withOpacity(0.50),
-// // //                   fontSize: compact ? 10.5 : 12,
-// // //                   fontWeight: FontWeight.w700,
-// // //                 ),
-// // //               ),
-// // //             ],
-// // //           ),
 // // //         ],
 // // //       ),
 // // //     );
 // // //   }
 // // // }
 // // //
-// // // class DeviceNotConnectedBadge extends StatelessWidget {
-// // //   const DeviceNotConnectedBadge({super.key});
+// // // class NoDeviceProfessionalNotice extends StatelessWidget {
+// // //   final VoidCallback onSelectDevice;
 // // //
-// // //   @override
-// // //   Widget build(BuildContext context) {
-// // //     return _InfoBadge(
-// // //       icon: Icons.link_off_rounded,
-// // //       color: AppColors.warning,
-// // //       text: "Device not connected. Select a device to view live parameters.",
-// // //     );
-// // //   }
-// // // }
-// // //
-// // // class WaitingTelemetryBadge extends StatelessWidget {
-// // //   const WaitingTelemetryBadge({super.key});
-// // //
-// // //   @override
-// // //   Widget build(BuildContext context) {
-// // //     return _InfoBadge(
-// // //       icon: Icons.sync_rounded,
-// // //       color: AppColors.primary,
-// // //       text: "Device selected. Waiting for latest telemetry values.",
-// // //     );
-// // //   }
-// // // }
-// // //
-// // // class DeviceDisconnectedBadge extends StatelessWidget {
-// // //   const DeviceDisconnectedBadge({super.key});
-// // //
-// // //   @override
-// // //   Widget build(BuildContext context) {
-// // //     return _InfoBadge(
-// // //       icon: Icons.wifi_off_rounded,
-// // //       color: AppColors.warning,
-// // //       text: "Device disconnected. Showing last received values when available.",
-// // //     );
-// // //   }
-// // // }
-// // //
-// // // class _InfoBadge extends StatelessWidget {
-// // //   final IconData icon;
-// // //   final Color color;
-// // //   final String text;
-// // //
-// // //   const _InfoBadge({
-// // //     required this.icon,
-// // //     required this.color,
-// // //     required this.text,
-// // //   });
-// // //
-// // //   @override
-// // //   Widget build(BuildContext context) {
-// // //     return Container(
-// // //       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-// // //       decoration: BoxDecoration(
-// // //         color: color.withOpacity(0.12),
-// // //         borderRadius: BorderRadius.circular(14),
-// // //         border: Border.all(color: color.withOpacity(0.3)),
-// // //       ),
-// // //       child: Row(
-// // //         children: [
-// // //           Icon(icon, color: color, size: 18),
-// // //           const SizedBox(width: 8),
-// // //           Expanded(
-// // //             child: Text(
-// // //               text,
-// // //               style: TextStyle(
-// // //                 color: AppColors.white.withOpacity(0.85),
-// // //                 fontWeight: FontWeight.w700,
-// // //                 fontSize: 12.5,
-// // //               ),
-// // //             ),
-// // //           ),
-// // //         ],
-// // //       ),
-// // //     );
-// // //   }
-// // // }
-// // //
-// // // class StatusPanel extends StatelessWidget {
-// // //   final MotorSnapshot snapshot;
-// // //   final Animation<double> pulseAnimation;
-// // //
-// // //   const StatusPanel({
+// // //   const NoDeviceProfessionalNotice({
 // // //     super.key,
-// // //     required this.snapshot,
-// // //     required this.pulseAnimation,
+// // //     required this.onSelectDevice,
 // // //   });
 // // //
 // // //   @override
 // // //   Widget build(BuildContext context) {
-// // //     final phaseOk = snapshot.connectionStatus == DeviceConnectionStatus.connected;
-// // //     final motorOk = snapshot.isRunning;
-// // //     final tripOk = !snapshot.hasFault;
-// // //     final serviceOk = snapshot.connectionStatus == DeviceConnectionStatus.connected;
-// // //
 // // //     return Container(
-// // //       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+// // //       padding: const EdgeInsets.all(18),
 // // //       decoration: BoxDecoration(
 // // //         color: AppColors.cardDark,
 // // //         borderRadius: BorderRadius.circular(24),
@@ -1097,160 +931,37 @@
 // // //       ),
 // // //       child: Row(
 // // //         children: [
+// // //           Container(
+// // //             height: 46,
+// // //             width: 46,
+// // //             decoration: BoxDecoration(
+// // //               color: AppColors.primary.withOpacity(0.10),
+// // //               borderRadius: BorderRadius.circular(16),
+// // //             ),
+// // //             child: const Icon(
+// // //               Icons.devices_other_rounded,
+// // //               color: AppColors.primary,
+// // //             ),
+// // //           ),
+// // //           const SizedBox(width: 14),
 // // //           Expanded(
-// // //             child: StatusDot(
-// // //               title: "Phase",
-// // //               ok: phaseOk,
-// // //               blinking: false,
-// // //               pulseAnimation: pulseAnimation,
-// // //             ),
-// // //           ),
-// // //           Expanded(
-// // //             child: StatusDot(
-// // //               title: "Motor",
-// // //               ok: motorOk,
-// // //               blinking: false,
-// // //               pulseAnimation: pulseAnimation,
-// // //             ),
-// // //           ),
-// // //           Expanded(
-// // //             child: StatusDot(
-// // //               title: "Trip",
-// // //               ok: tripOk,
-// // //               blinking: snapshot.hasFault,
-// // //               pulseAnimation: pulseAnimation,
-// // //             ),
-// // //           ),
-// // //           Expanded(
-// // //             child: StatusDot(
-// // //               title: "Service",
-// // //               ok: serviceOk,
-// // //               blinking: snapshot.connectionStatus == DeviceConnectionStatus.disconnected,
-// // //               pulseAnimation: pulseAnimation,
-// // //             ),
-// // //           ),
-// // //         ],
-// // //       ),
-// // //     );
-// // //   }
-// // // }
-// // //
-// // // class StatusDot extends StatelessWidget {
-// // //   final String title;
-// // //   final bool ok;
-// // //   final bool blinking;
-// // //   final Animation<double> pulseAnimation;
-// // //
-// // //   const StatusDot({
-// // //     super.key,
-// // //     required this.title,
-// // //     required this.ok,
-// // //     required this.blinking,
-// // //     required this.pulseAnimation,
-// // //   });
-// // //
-// // //   @override
-// // //   Widget build(BuildContext context) {
-// // //     final width = MediaQuery.of(context).size.width;
-// // //     final dotSize = width < 360 ? 40.0 : 48.0;
-// // //     final baseColor = ok ? AppColors.green : AppColors.error;
-// // //
-// // //     return AnimatedBuilder(
-// // //       animation: pulseAnimation,
-// // //       builder: (context, child) {
-// // //         final scale = blinking ? pulseAnimation.value : 1.0;
-// // //         final opacity = blinking ? (0.55 + (pulseAnimation.value - 0.82)) : 1.0;
-// // //
-// // //         return Column(
-// // //           children: [
-// // //             Transform.scale(
-// // //               scale: scale,
-// // //               child: Opacity(
-// // //                 opacity: opacity.clamp(0.45, 1.0),
-// // //                 child: Container(
-// // //                   height: dotSize,
-// // //                   width: dotSize,
-// // //                   decoration: BoxDecoration(
-// // //                     color: baseColor,
-// // //                     shape: BoxShape.circle,
-// // //                     boxShadow: [
-// // //                       BoxShadow(
-// // //                         color: baseColor.withOpacity(0.42),
-// // //                         blurRadius: blinking ? 28 : 18,
-// // //                         spreadRadius: blinking ? 4 : 2,
-// // //                       ),
-// // //                     ],
-// // //                   ),
-// // //                 ),
-// // //               ),
-// // //             ),
-// // //             const SizedBox(height: 8),
-// // //             FittedBox(
-// // //               child: Text(
-// // //                 title,
-// // //                 style: TextStyle(
-// // //                   color: AppColors.white.withOpacity(0.7),
-// // //                   fontSize: width < 360 ? 12 : 14,
-// // //                   fontWeight: FontWeight.w700,
-// // //                 ),
-// // //               ),
-// // //             ),
-// // //           ],
-// // //         );
-// // //       },
-// // //     );
-// // //   }
-// // // }
-// // //
-// // // class SystemBanner extends StatelessWidget {
-// // //   final MotorSnapshot snapshot;
-// // //
-// // //   const SystemBanner({super.key, required this.snapshot});
-// // //
-// // //   @override
-// // //   Widget build(BuildContext context) {
-// // //     final width = MediaQuery.of(context).size.width;
-// // //
-// // //     final text = snapshot.hasFault
-// // //         ? "${snapshot.faultName} Fault"
-// // //         : snapshot.isRunning
-// // //         ? snapshot.runSourceText
-// // //         : snapshot.statusName;
-// // //
-// // //     final foregroundColor = snapshot.bannerColor == AppColors.primary
-// // //         ? AppColors.black
-// // //         : AppColors.white;
-// // //
-// // //     return Container(
-// // //       width: double.infinity,
-// // //       padding: EdgeInsets.symmetric(
-// // //         vertical: width < 360 ? 14 : 16,
-// // //         horizontal: 18,
-// // //       ),
-// // //       decoration: BoxDecoration(
-// // //         color: snapshot.bannerColor,
-// // //         borderRadius: BorderRadius.circular(22),
-// // //         boxShadow: [
-// // //           BoxShadow(
-// // //             color: snapshot.bannerColor.withOpacity(0.22),
-// // //             blurRadius: 20,
-// // //             offset: const Offset(0, 10),
-// // //           ),
-// // //         ],
-// // //       ),
-// // //       child: Row(
-// // //         mainAxisAlignment: MainAxisAlignment.center,
-// // //         children: [
-// // //           Icon(snapshot.bannerIcon, color: foregroundColor, size: width < 360 ? 24 : 27),
-// // //           const SizedBox(width: 10),
-// // //           Flexible(
 // // //             child: Text(
-// // //               text,
-// // //               overflow: TextOverflow.ellipsis,
-// // //               textAlign: TextAlign.center,
+// // //               "Select a device to enable motor control. Parameters stay empty until a controller is selected.",
 // // //               style: TextStyle(
-// // //                 color: foregroundColor,
-// // //                 fontSize: width < 360 ? 16 : 19,
+// // //                 color: AppColors.white.withOpacity(0.68),
+// // //                 fontSize: 13.5,
+// // //                 height: 1.4,
+// // //                 fontWeight: FontWeight.w700,
+// // //               ),
+// // //             ),
+// // //           ),
+// // //           const SizedBox(width: 10),
+// // //           TextButton(
+// // //             onPressed: onSelectDevice,
+// // //             child: const Text(
+// // //               "Select",
+// // //               style: TextStyle(
+// // //                 color: AppColors.primary,
 // // //                 fontWeight: FontWeight.w900,
 // // //               ),
 // // //             ),
@@ -1261,49 +972,49 @@
 // // //   }
 // // // }
 // // //
-// // // class FaultAlertCard extends StatelessWidget {
-// // //   final MotorSnapshot snapshot;
+// // // class DeviceOfflineNotice extends StatelessWidget {
+// // //   final Future<void> Function() onRetry;
 // // //
-// // //   const FaultAlertCard({super.key, required this.snapshot});
+// // //   const DeviceOfflineNotice({
+// // //     super.key,
+// // //     required this.onRetry,
+// // //   });
 // // //
 // // //   @override
 // // //   Widget build(BuildContext context) {
 // // //     return Container(
-// // //       width: double.infinity,
-// // //       padding: const EdgeInsets.all(17),
+// // //       padding: const EdgeInsets.all(14),
 // // //       decoration: BoxDecoration(
-// // //         color: AppColors.error.withOpacity(0.14),
-// // //         borderRadius: BorderRadius.circular(22),
-// // //         border: Border.all(color: AppColors.error.withOpacity(0.38)),
+// // //         color: AppColors.warning.withOpacity(0.10),
+// // //         borderRadius: BorderRadius.circular(18),
+// // //         border: Border.all(color: AppColors.warning.withOpacity(0.24)),
 // // //       ),
 // // //       child: Row(
-// // //         crossAxisAlignment: CrossAxisAlignment.start,
 // // //         children: [
-// // //           const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 30),
-// // //           const SizedBox(width: 12),
+// // //           const Icon(
+// // //             Icons.info_outline_rounded,
+// // //             color: AppColors.warning,
+// // //             size: 22,
+// // //           ),
+// // //           const SizedBox(width: 10),
 // // //           Expanded(
-// // //             child: Column(
-// // //               crossAxisAlignment: CrossAxisAlignment.start,
-// // //               children: [
-// // //                 Text(
-// // //                   snapshot.faultName,
-// // //                   style: const TextStyle(
-// // //                     color: AppColors.error,
-// // //                     fontSize: 18,
-// // //                     fontWeight: FontWeight.w900,
-// // //                   ),
-// // //                 ),
-// // //                 const SizedBox(height: 5),
-// // //                 Text(
-// // //                   snapshot.faultDescription,
-// // //                   style: TextStyle(
-// // //                     color: AppColors.white.withOpacity(0.78),
-// // //                     fontSize: 13.5,
-// // //                     height: 1.35,
-// // //                     fontWeight: FontWeight.w600,
-// // //                   ),
-// // //                 ),
-// // //               ],
+// // //             child: Text(
+// // //               "Device selected. Waiting for latest live reading.",
+// // //               style: TextStyle(
+// // //                 color: AppColors.white.withOpacity(0.78),
+// // //                 fontSize: 12.8,
+// // //                 fontWeight: FontWeight.w700,
+// // //               ),
+// // //             ),
+// // //           ),
+// // //           TextButton(
+// // //             onPressed: onRetry,
+// // //             child: const Text(
+// // //               "Retry",
+// // //               style: TextStyle(
+// // //                 color: AppColors.warning,
+// // //                 fontWeight: FontWeight.w900,
+// // //               ),
 // // //             ),
 // // //           ),
 // // //         ],
@@ -1312,13 +1023,58 @@
 // // //   }
 // // // }
 // // //
-// // // class CustomerNameField extends StatelessWidget {
+// // // class DeviceOnlineNotice extends StatelessWidget {
+// // //   final bool motorRunning;
+// // //
+// // //   const DeviceOnlineNotice({
+// // //     super.key,
+// // //     required this.motorRunning,
+// // //   });
+// // //
+// // //   @override
+// // //   Widget build(BuildContext context) {
+// // //     final text = motorRunning
+// // //         ? "Live telemetry received. Motor is running."
+// // //         : "Live telemetry received. Motor is stopped.";
+// // //
+// // //     return Container(
+// // //       padding: const EdgeInsets.all(14),
+// // //       decoration: BoxDecoration(
+// // //         color: AppColors.green.withOpacity(0.10),
+// // //         borderRadius: BorderRadius.circular(18),
+// // //         border: Border.all(color: AppColors.green.withOpacity(0.24)),
+// // //       ),
+// // //       child: Row(
+// // //         children: [
+// // //           const Icon(
+// // //             Icons.check_circle_rounded,
+// // //             color: AppColors.green,
+// // //             size: 22,
+// // //           ),
+// // //           const SizedBox(width: 10),
+// // //           Expanded(
+// // //             child: Text(
+// // //               text,
+// // //               style: TextStyle(
+// // //                 color: AppColors.white.withOpacity(0.78),
+// // //                 fontSize: 12.8,
+// // //                 fontWeight: FontWeight.w700,
+// // //               ),
+// // //             ),
+// // //           ),
+// // //         ],
+// // //       ),
+// // //     );
+// // //   }
+// // // }
+// // //
+// // // class CustomerNameInputCard extends StatelessWidget {
 // // //   final TextEditingController controller;
 // // //   final FocusNode focusNode;
 // // //   final List<String> suggestions;
 // // //   final bool enabled;
 // // //
-// // //   const CustomerNameField({
+// // //   const CustomerNameInputCard({
 // // //     super.key,
 // // //     required this.controller,
 // // //     required this.focusNode,
@@ -1337,7 +1093,9 @@
 // // //         final input = value.text.trim().toLowerCase();
 // // //         if (input.isEmpty) return const Iterable<String>.empty();
 // // //
-// // //         return suggestions.where((name) => name.toLowerCase().contains(input));
+// // //         return suggestions.where(
+// // //               (name) => name.toLowerCase().contains(input),
+// // //         );
 // // //       },
 // // //       onSelected: (String value) {
 // // //         controller.text = value;
@@ -1345,7 +1103,12 @@
 // // //           TextPosition(offset: controller.text.length),
 // // //         );
 // // //       },
-// // //       fieldViewBuilder: (context, textEditingController, fieldFocusNode, onFieldSubmitted) {
+// // //       fieldViewBuilder: (
+// // //           context,
+// // //           textEditingController,
+// // //           fieldFocusNode,
+// // //           onFieldSubmitted,
+// // //           ) {
 // // //         return Container(
 // // //           decoration: BoxDecoration(
 // // //             color: AppColors.cardDark,
@@ -1357,20 +1120,29 @@
 // // //             controller: textEditingController,
 // // //             focusNode: fieldFocusNode,
 // // //             keyboardType: TextInputType.text,
-// // //             style: const TextStyle(color: AppColors.white, fontWeight: FontWeight.w700),
+// // //             style: const TextStyle(
+// // //               color: AppColors.white,
+// // //               fontWeight: FontWeight.w700,
+// // //             ),
 // // //             textInputAction: TextInputAction.done,
 // // //             decoration: InputDecoration(
-// // //               hintText: enabled ? "Customer name for Khata" : "Select a device first",
-// // //               hintStyle: TextStyle(color: AppColors.white.withOpacity(0.42)),
+// // //               hintText: enabled
+// // //                   ? "Customer name for Khata"
+// // //                   : "Device must be online first",
+// // //               hintStyle: TextStyle(
+// // //                 color: AppColors.white.withOpacity(0.42),
+// // //               ),
 // // //               prefixIcon: Icon(
-// // //                 enabled ? Icons.person_outline_rounded : Icons.lock_outline_rounded,
+// // //                 enabled
+// // //                     ? Icons.person_outline_rounded
+// // //                     : Icons.lock_outline_rounded,
 // // //                 color: AppColors.primary,
 // // //               ),
-// // //               suffixIcon: suggestions.isEmpty || !enabled
-// // //                   ? null
-// // //                   : Icon(Icons.manage_search_rounded, color: AppColors.white.withOpacity(0.45)),
 // // //               border: InputBorder.none,
-// // //               contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+// // //               contentPadding: const EdgeInsets.symmetric(
+// // //                 horizontal: 18,
+// // //                 vertical: 18,
+// // //               ),
 // // //             ),
 // // //           ),
 // // //         );
@@ -1382,35 +1154,41 @@
 // // //             color: Colors.transparent,
 // // //             child: Container(
 // // //               width: MediaQuery.of(context).size.width - 36,
-// // //               constraints: const BoxConstraints(maxHeight: 240, maxWidth: 560),
+// // //               constraints: const BoxConstraints(
+// // //                 maxHeight: 240,
+// // //                 maxWidth: 560,
+// // //               ),
 // // //               margin: const EdgeInsets.only(top: 8),
 // // //               decoration: BoxDecoration(
 // // //                 color: AppColors.cardDark,
 // // //                 borderRadius: BorderRadius.circular(18),
 // // //                 border: Border.all(color: AppColors.borderDark),
-// // //                 boxShadow: [
-// // //                   BoxShadow(
-// // //                     color: Colors.black.withOpacity(0.34),
-// // //                     blurRadius: 22,
-// // //                     offset: const Offset(0, 12),
-// // //                   ),
-// // //                 ],
 // // //               ),
 // // //               child: ListView.separated(
 // // //                 padding: const EdgeInsets.symmetric(vertical: 6),
 // // //                 shrinkWrap: true,
 // // //                 itemCount: options.length,
 // // //                 separatorBuilder: (_, __) {
-// // //                   return Divider(height: 1, color: AppColors.white.withOpacity(0.06));
+// // //                   return Divider(
+// // //                     height: 1,
+// // //                     color: AppColors.white.withOpacity(0.06),
+// // //                   );
 // // //                 },
 // // //                 itemBuilder: (context, index) {
 // // //                   final option = options.elementAt(index);
+// // //
 // // //                   return ListTile(
 // // //                     dense: true,
-// // //                     leading: const Icon(Icons.person_rounded, color: AppColors.primary),
+// // //                     leading: const Icon(
+// // //                       Icons.person_rounded,
+// // //                       color: AppColors.primary,
+// // //                     ),
 // // //                     title: Text(
 // // //                       option,
-// // //                       style: const TextStyle(color: AppColors.white, fontWeight: FontWeight.w800),
+// // //                       style: const TextStyle(
+// // //                         color: AppColors.white,
+// // //                         fontWeight: FontWeight.w800,
+// // //                       ),
 // // //                     ),
 // // //                     onTap: () => onSelected(option),
 // // //                   );
@@ -1424,39 +1202,49 @@
 // // //   }
 // // // }
 // // //
-// // // class MotorButton extends StatelessWidget {
-// // //   final MotorSnapshot snapshot;
+// // // class MotorCommandButton extends StatelessWidget {
+// // //   final bool hasDevice;
+// // //   final bool deviceOnline;
+// // //   final bool isOn;
 // // //   final bool loading;
 // // //   final double size;
 // // //
-// // //   const MotorButton({
+// // //   const MotorCommandButton({
 // // //     super.key,
-// // //     required this.snapshot,
+// // //     required this.hasDevice,
+// // //     required this.deviceOnline,
+// // //     required this.isOn,
 // // //     required this.loading,
 // // //     required this.size,
 // // //   });
 // // //
 // // //   @override
 // // //   Widget build(BuildContext context) {
-// // //     final activeColor = snapshot.connectionStatus == DeviceConnectionStatus.noDevice
+// // //     final activeColor = !hasDevice
+// // //         ? AppColors.primary
+// // //         : !deviceOnline
 // // //         ? AppColors.warning
-// // //         : snapshot.connectionStatus == DeviceConnectionStatus.disconnected
-// // //         ? AppColors.warning
-// // //         : snapshot.hasFault
-// // //         ? AppColors.error
-// // //         : snapshot.isRunning
+// // //         : isOn
 // // //         ? AppColors.green
 // // //         : AppColors.error;
 // // //
-// // //     final label = snapshot.connectionStatus == DeviceConnectionStatus.noDevice
-// // //         ? "N/A"
-// // //         : snapshot.connectionStatus == DeviceConnectionStatus.disconnected
-// // //         ? "OFFLINE"
-// // //         : snapshot.hasFault
-// // //         ? "FAULT"
-// // //         : snapshot.isRunning
+// // //     final label = !hasDevice
+// // //         ? "SELECT"
+// // //         : !deviceOnline
+// // //         ? "WAIT"
+// // //         : isOn
 // // //         ? "ON"
 // // //         : "OFF";
+// // //
+// // //     final icon = !hasDevice
+// // //         ? Icons.devices_other_rounded
+// // //         : !deviceOnline
+// // //         ? Icons.wifi_tethering_error_rounded
+// // //         : isOn
+// // //         ? Icons.power_settings_new_rounded
+// // //         : Icons.power_off_rounded;
+// // //
+// // //     final textColor = !hasDevice ? AppColors.black : AppColors.white;
 // // //
 // // //     return AnimatedContainer(
 // // //       duration: const Duration(milliseconds: 300),
@@ -1468,11 +1256,14 @@
 // // //         gradient: LinearGradient(
 // // //           begin: Alignment.topLeft,
 // // //           end: Alignment.bottomRight,
-// // //           colors: [activeColor, activeColor.withOpacity(0.72)],
+// // //           colors: [
+// // //             activeColor,
+// // //             activeColor.withOpacity(0.72),
+// // //           ],
 // // //         ),
 // // //         boxShadow: [
 // // //           BoxShadow(
-// // //             color: activeColor.withOpacity(0.34),
+// // //             color: activeColor.withOpacity(0.30),
 // // //             blurRadius: 34,
 // // //             offset: const Offset(0, 16),
 // // //           ),
@@ -1483,14 +1274,24 @@
 // // //           : Column(
 // // //         mainAxisAlignment: MainAxisAlignment.center,
 // // //         children: [
-// // //           Icon(snapshot.bannerIcon, color: AppColors.white, size: size < 190 ? 36 : 42),
+// // //           Icon(
+// // //             icon,
+// // //             color: textColor,
+// // //             size: size < 190 ? 36 : 42,
+// // //           ),
 // // //           const SizedBox(height: 8),
 // // //           FittedBox(
 // // //             child: Text(
 // // //               label,
 // // //               style: TextStyle(
-// // //                 color: AppColors.white,
-// // //                 fontSize: label == "OFFLINE" ? 22 : size < 190 ? 26 : 36,
+// // //                 color: textColor,
+// // //                 fontSize: label == "SELECT"
+// // //                     ? 24
+// // //                     : label == "WAIT"
+// // //                     ? 24
+// // //                     : size < 190
+// // //                     ? 26
+// // //                     : 36,
 // // //                 fontWeight: FontWeight.w900,
 // // //               ),
 // // //             ),
@@ -1501,18 +1302,90 @@
 // // //   }
 // // // }
 // // //
-// // // class MetricCard extends StatelessWidget {
+// // // class MotorCommandStatusText extends StatelessWidget {
+// // //   final bool hasDevice;
+// // //   final bool deviceOnline;
+// // //   final bool isOn;
+// // //   final String runningTime;
+// // //
+// // //   const MotorCommandStatusText({
+// // //     super.key,
+// // //     required this.hasDevice,
+// // //     required this.deviceOnline,
+// // //     required this.isOn,
+// // //     required this.runningTime,
+// // //   });
+// // //
+// // //   @override
+// // //   Widget build(BuildContext context) {
+// // //     final text = !hasDevice
+// // //         ? "Select a device to activate motor control"
+// // //         : !deviceOnline
+// // //         ? "Waiting for live telemetry"
+// // //         : isOn
+// // //         ? "Motor running | $runningTime"
+// // //         : "Device online | Motor stopped";
+// // //
+// // //     return Text(
+// // //       text,
+// // //       textAlign: TextAlign.center,
+// // //       style: TextStyle(
+// // //         color: AppColors.white.withOpacity(0.76),
+// // //         fontSize: 16,
+// // //         fontWeight: FontWeight.w700,
+// // //       ),
+// // //     );
+// // //   }
+// // // }
+// // //
+// // // class ParameterMetric {
 // // //   final IconData icon;
 // // //   final String title;
 // // //   final String value;
 // // //   final bool highlight;
 // // //
-// // //   const MetricCard({
-// // //     super.key,
+// // //   const ParameterMetric({
 // // //     required this.icon,
 // // //     required this.title,
 // // //     required this.value,
 // // //     this.highlight = false,
+// // //   });
+// // // }
+// // //
+// // // class ParameterGridSection extends StatelessWidget {
+// // //   final int crossAxisCount;
+// // //   final double childAspectRatio;
+// // //   final List<ParameterMetric> metrics;
+// // //
+// // //   const ParameterGridSection({
+// // //     super.key,
+// // //     required this.crossAxisCount,
+// // //     required this.childAspectRatio,
+// // //     required this.metrics,
+// // //   });
+// // //
+// // //   @override
+// // //   Widget build(BuildContext context) {
+// // //     return GridView.count(
+// // //       shrinkWrap: true,
+// // //       physics: const NeverScrollableScrollPhysics(),
+// // //       crossAxisCount: crossAxisCount,
+// // //       crossAxisSpacing: 14,
+// // //       mainAxisSpacing: 14,
+// // //       childAspectRatio: childAspectRatio,
+// // //       children: metrics.map((metric) {
+// // //         return ParameterMetricCard(metric: metric);
+// // //       }).toList(),
+// // //     );
+// // //   }
+// // // }
+// // //
+// // // class ParameterMetricCard extends StatelessWidget {
+// // //   final ParameterMetric metric;
+// // //
+// // //   const ParameterMetricCard({
+// // //     super.key,
+// // //     required this.metric,
 // // //   });
 // // //
 // // //   @override
@@ -1526,11 +1399,13 @@
 // // //         color: AppColors.cardDark,
 // // //         borderRadius: BorderRadius.circular(22),
 // // //         border: Border.all(
-// // //           color: highlight ? AppColors.primary.withOpacity(0.38) : AppColors.borderDark,
+// // //           color: metric.highlight
+// // //               ? AppColors.primary.withOpacity(0.38)
+// // //               : AppColors.borderDark,
 // // //         ),
 // // //         boxShadow: [
 // // //           BoxShadow(
-// // //             color: AppColors.shadowDark.withOpacity(0.26),
+// // //             color: Colors.black.withOpacity(0.20),
 // // //             blurRadius: 18,
 // // //             offset: const Offset(0, 9),
 // // //           ),
@@ -1540,13 +1415,15 @@
 // // //         crossAxisAlignment: CrossAxisAlignment.start,
 // // //         children: [
 // // //           Icon(
-// // //             icon,
-// // //             color: highlight ? AppColors.primary : AppColors.iconInactiveDark,
+// // //             metric.icon,
+// // //             color: metric.highlight
+// // //                 ? AppColors.primary
+// // //                 : AppColors.white.withOpacity(0.45),
 // // //             size: compact ? 24 : 28,
 // // //           ),
 // // //           const Spacer(),
 // // //           Text(
-// // //             title,
+// // //             metric.title,
 // // //             maxLines: 1,
 // // //             overflow: TextOverflow.ellipsis,
 // // //             style: TextStyle(
@@ -1560,7 +1437,7 @@
 // // //             alignment: Alignment.centerLeft,
 // // //             fit: BoxFit.scaleDown,
 // // //             child: Text(
-// // //               value,
+// // //               metric.value,
 // // //               style: TextStyle(
 // // //                 color: AppColors.white,
 // // //                 height: 1.25,
@@ -1574,105 +1451,21 @@
 // // //     );
 // // //   }
 // // // }
-// // //
-// // // class DeviceSessionCard extends StatelessWidget {
-// // //   final String? deviceId;
-// // //   final MotorSnapshot snapshot;
-// // //   final int? timestamp;
-// // //
-// // //   const DeviceSessionCard({
-// // //     super.key,
-// // //     required this.deviceId,
-// // //     required this.snapshot,
-// // //     required this.timestamp,
-// // //   });
-// // //
-// // //   @override
-// // //   Widget build(BuildContext context) {
-// // //     final liveText = snapshot.statusName;
-// // //     final liveColor = snapshot.bannerColor;
-// // //
-// // //     return Container(
-// // //       width: double.infinity,
-// // //       padding: const EdgeInsets.all(18),
-// // //       decoration: BoxDecoration(
-// // //         color: AppColors.cardDark,
-// // //         borderRadius: BorderRadius.circular(22),
-// // //         border: Border.all(color: AppColors.borderDark),
-// // //       ),
-// // //       child: Column(
-// // //         crossAxisAlignment: CrossAxisAlignment.start,
-// // //         children: [
-// // //           const Text(
-// // //             "Device Session",
-// // //             style: TextStyle(color: AppColors.white, fontSize: 18, fontWeight: FontWeight.w900),
-// // //           ),
-// // //           const SizedBox(height: 12),
-// // //           Row(
-// // //             children: [
-// // //               Container(
-// // //                 height: 10,
-// // //                 width: 10,
-// // //                 decoration: BoxDecoration(color: liveColor, shape: BoxShape.circle),
-// // //               ),
-// // //               const SizedBox(width: 8),
-// // //               Expanded(
-// // //                 child: Text(
-// // //                   liveText,
-// // //                   maxLines: 1,
-// // //                   overflow: TextOverflow.ellipsis,
-// // //                   style: TextStyle(color: liveColor, fontWeight: FontWeight.w900),
-// // //                 ),
-// // //               ),
-// // //               Text(
-// // //                 "Code ${snapshot.statusCode ?? "-"}",
-// // //                 style: TextStyle(color: AppColors.white.withOpacity(0.56), fontWeight: FontWeight.w700),
-// // //               ),
-// // //             ],
-// // //           ),
-// // //           const SizedBox(height: 12),
-// // //           Text(
-// // //             "Device ID: ${snapshot.hasDevice ? deviceId : "Device not connected"}",
-// // //             style: TextStyle(color: AppColors.white.withOpacity(0.62), fontWeight: FontWeight.w600),
-// // //           ),
-// // //           const SizedBox(height: 6),
-// // //           Text(
-// // //             "Timestamp: ${timestamp?.toString() ?? "-"}",
-// // //             style: TextStyle(color: AppColors.white.withOpacity(0.62), fontWeight: FontWeight.w600),
-// // //           ),
-// // //         ],
-// // //       ),
-// // //     );
-// // //   }
-// // // }
-// // //
-// //
 // // import "dart:async";
-// // import 'package:intl/intl.dart';
+// // import "dart:ui" show FontFeature;
+// //
 // // import "package:flutter/material.dart";
 // // import "package:flutter/services.dart";
 // // import "package:flutter_riverpod/flutter_riverpod.dart";
 // //
 // // import "package:smart_iot_app/src/core/constant/app_color.dart";
+// // import "package:smart_iot_app/src/features/khata/data/models/khata_entry_model.dart";
 // // import "package:smart_iot_app/src/features/widget/custom_drawer.dart";
 // //
 // // import "../../../../app/routes.dart";
 // // import "../../../khata/presentation/providers/ khata_providers.dart";
 // // import "../../../motor/presentation/ providers/motor_providers.dart";
 // // import "../../../telemetry/presentation/providers/telemetry_providers.dart";
-// //
-// // enum MotorRunSource {
-// //   none,
-// //   appButton,
-// //   physicalButton,
-// // }
-// //
-// // enum DeviceConnectionStatus {
-// //   noDevice,
-// //   waitingTelemetry,
-// //   connected,
-// //   disconnected,
-// // }
 // //
 // // class HomeScreen extends ConsumerStatefulWidget {
 // //   final String? deviceId;
@@ -1687,35 +1480,43 @@
 // // }
 // //
 // // class _HomeScreenState extends ConsumerState<HomeScreen>
-// //     with SingleTickerProviderStateMixin {
+// //     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
 // //   late AnimationController pulseController;
 // //   late Animation<double> pulseAnimation;
 // //
 // //   final TextEditingController customerNameController = TextEditingController();
 // //   final FocusNode customerNameFocusNode = FocusNode();
 // //
-// //   Timer? runTimer;
+// //   KhataEntryModel? activeKhataEntry;
+// //
 // //   Timer? telemetryTimer;
+// //   Timer? runTimer;
 // //
 // //   int runSeconds = 0;
-// //   int telemetryFailures = 0;
+// //   DateTime? motorStartedAt;
 // //
 // //   String? userId;
 // //   String? deviceId;
-// //   String? deviceName; // ✅ Added deviceName field
+// //   String? deviceName;
 // //
 // //   bool didSetupDevice = false;
 // //   bool isTelemetryLoading = false;
-// //   bool noDeviceSnackShown = false;
-// //   bool appMotorOn = false;
+// //   bool firstTelemetryLoaded = false;
 // //
-// //   MotorRunSource runSource = MotorRunSource.none;
+// //   // Keeps the motor button in loading state until VFD telemetry confirms
+// //   // the requested ON/OFF state.
+// //   bool isWaitingForVfdConfirmation = false;
+// //
+// //   // While a command is pending, keep showing the last confirmed state.
+// //   // This prevents ON -> OFF -> ON / OFF -> ON -> OFF visual flicker.
+// //   bool? motorStateBeforePendingCommand;
 // //
 // //   bool get hasDevice => deviceId != null && deviceId!.trim().isNotEmpty;
 // //
 // //   @override
 // //   void initState() {
 // //     super.initState();
+// //     WidgetsBinding.instance.addObserver(this);
 // //
 // //     pulseController = AnimationController(
 // //       vsync: this,
@@ -1728,6 +1529,17 @@
 // //   }
 // //
 // //   @override
+// //   void didChangeAppLifecycleState(AppLifecycleState state) {
+// //     if (state == AppLifecycleState.resumed) {
+// //       _refreshRunSeconds();
+// //
+// //       if (hasDevice) {
+// //         Future.microtask(() => loadTelemetry(showError: false));
+// //       }
+// //     }
+// //   }
+// //
+// //   @override
 // //   void didChangeDependencies() {
 // //     super.didChangeDependencies();
 // //
@@ -1736,26 +1548,25 @@
 // //
 // //     final args = ModalRoute.of(context)?.settings.arguments;
 // //
-// //     String? parsedDeviceId;
-// //     String? parsedDeviceName;
-// //     String? parsedUserId;
-// //
 // //     if (args is Map) {
-// //       parsedUserId = args["userId"]?.toString();
-// //       parsedDeviceId = args["deviceId"]?.toString();
-// //       parsedDeviceName = args["deviceName"]?.toString(); // ✅ Read deviceName from args
+// //       userId = args["userId"]?.toString();
+// //
+// //       final rawDeviceId = args["deviceId"]?.toString().trim();
+// //       if (rawDeviceId != null && rawDeviceId.isNotEmpty) {
+// //         deviceId = rawDeviceId;
+// //       }
+// //
+// //       final rawDeviceName = args["deviceName"]?.toString().trim();
+// //       if (rawDeviceName != null && rawDeviceName.isNotEmpty) {
+// //         deviceName = rawDeviceName;
+// //       }
 // //     }
 // //
-// //     userId = parsedUserId;
-// //
 // //     final widgetDeviceId = widget.deviceId?.trim();
-// //     deviceId = (parsedDeviceId ?? widgetDeviceId)?.trim();
-// //     if (deviceId != null && deviceId!.isEmpty) deviceId = null;
 // //
-// //     // ✅ Store deviceName from navigation args
-// //     deviceName = (parsedDeviceName != null && parsedDeviceName.trim().isNotEmpty)
-// //         ? parsedDeviceName.trim()
-// //         : null;
+// //     if (!hasDevice && widgetDeviceId != null && widgetDeviceId.isNotEmpty) {
+// //       deviceId = widgetDeviceId;
+// //     }
 // //
 // //     if (hasDevice) {
 // //       Future.microtask(() async {
@@ -1768,34 +1579,178 @@
 // //         const Duration(seconds: 5),
 // //             (_) => loadTelemetry(showError: false),
 // //       );
-// //     } else {
-// //       Future.microtask(() {
-// //         if (!mounted || noDeviceSnackShown) return;
-// //         noDeviceSnackShown = true;
-// //         showMessage("Device not connected. Opened dashboard safely.", false);
-// //       });
 // //     }
 // //   }
 // //
 // //   @override
 // //   void dispose() {
+// //     WidgetsBinding.instance.removeObserver(this);
 // //     pulseController.dispose();
 // //     customerNameController.dispose();
 // //     customerNameFocusNode.dispose();
-// //     runTimer?.cancel();
 // //     telemetryTimer?.cancel();
+// //     runTimer?.cancel();
 // //     super.dispose();
 // //   }
 // //
-// //   DeviceConnectionStatus connectionStatus(dynamic latest) {
-// //     if (!hasDevice) return DeviceConnectionStatus.noDevice;
-// //     if (latest != null && telemetryFailures < 3) {
-// //       return DeviceConnectionStatus.connected;
+// //   int _toInt(dynamic value) {
+// //     if (value == null) return 0;
+// //     if (value is int) return value;
+// //     if (value is double) return value.toInt();
+// //     if (value is num) return value.toInt();
+// //     return int.tryParse(value.toString()) ?? 0;
+// //   }
+// //
+// //   bool isDeviceOnline(dynamic latest) {
+// //     if (!hasDevice) return false;
+// //     if (latest == null) return false;
+// //
+// //     final live = _toInt(latest.isLive) == 1;
+// //     final fresh = latest.isFresh(withinSeconds: 20);
+// //
+// //     return live && fresh;
+// //   }
+// //
+// //
+// //   bool isMotorRunning(dynamic latest) {
+// //     if (!hasDevice) return false;
+// //     if (!isDeviceOnline(latest)) return false;
+// //
+// //     final statusCode = _toInt(latest.statusCode);
+// //
+// //     return statusCode == 1 || statusCode == 2;
+// //   }
+// //
+// //   Future<void> loadTelemetry({bool showError = false}) async {
+// //     if (!hasDevice) return;
+// //     if (isTelemetryLoading) return;
+// //
+// //     final isFirstLoad = !firstTelemetryLoaded;
+// //
+// //     isTelemetryLoading = true;
+// //
+// //     try {
+// //       await ref.read(telemetryViewModelProvider.notifier).loadLatest(
+// //         deviceId!,
+// //         showLoading: isFirstLoad,
+// //       );
+// //     } catch (e) {
+// //       if (showError) {
+// //         showMessage(
+// //           "Telemetry failed: ${friendlyError(e.toString())}",
+// //           true,
+// //           seconds: 8,
+// //         );
+// //       }
+// //     } finally {
+// //       isTelemetryLoading = false;
+// //
+// //       if (mounted && isFirstLoad) {
+// //         setState(() {
+// //           firstTelemetryLoaded = true;
+// //         });
+// //       }
 // //     }
-// //     if (telemetryFailures >= 3) {
-// //       return DeviceConnectionStatus.disconnected;
+// //   }
+// //
+// //   Future<bool> _waitForVfdConfirmation({
+// //     required bool expectedOn,
+// //     required int telemetryTimestampBeforeCommand,
+// //   }) async {
+// //     final deadline = DateTime.now().add(const Duration(seconds: 30));
+// //
+// //     int consecutiveMatches = 0;
+// //     int lastCheckedTimestamp = telemetryTimestampBeforeCommand;
+// //
+// //     while (mounted && DateTime.now().isBefore(deadline)) {
+// //       await loadTelemetry(showError: false);
+// //
+// //       if (!mounted) return false;
+// //
+// //       final latest = ref.read(telemetryViewModelProvider).latest;
+// //
+// //       if (!isDeviceOnline(latest)) {
+// //         await Future.delayed(const Duration(seconds: 1));
+// //         continue;
+// //       }
+// //
+// //       final telemetryTimestamp = _toInt(latest?.timestamp);
+// //
+// //       // Do not confirm from the telemetry record that existed before
+// //       // the command, and do not count the same telemetry record twice.
+// //       if (telemetryTimestamp <= telemetryTimestampBeforeCommand ||
+// //           telemetryTimestamp <= lastCheckedTimestamp) {
+// //         await Future.delayed(const Duration(seconds: 1));
+// //         continue;
+// //       }
+// //
+// //       lastCheckedTimestamp = telemetryTimestamp;
+// //
+// //       final confirmedMotorState = isMotorRunning(latest);
+// //
+// //       if (confirmedMotorState == expectedOn) {
+// //         consecutiveMatches++;
+// //
+// //         // Two NEW consecutive VFD readings must agree before the UI
+// //         // leaves the circular progress state. This removes transient
+// //         // ON/OFF/ON or OFF/ON/OFF flicker.
+// //         if (consecutiveMatches >= 2) {
+// //           return true;
+// //         }
+// //       } else {
+// //         consecutiveMatches = 0;
+// //       }
+// //
+// //       await Future.delayed(const Duration(seconds: 1));
 // //     }
-// //     return DeviceConnectionStatus.waitingTelemetry;
+// //
+// //     return false;
+// //   }
+// //
+// //   void _startLocalTimer({DateTime? startedAt}) {
+// //     if (startedAt != null) {
+// //       motorStartedAt = startedAt;
+// //     } else {
+// //       motorStartedAt ??= DateTime.now();
+// //     }
+// //
+// //     runTimer?.cancel();
+// //     _refreshRunSeconds();
+// //
+// //     runTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+// //       _refreshRunSeconds();
+// //     });
+// //   }
+// //
+// //   void _refreshRunSeconds() {
+// //     final startedAt = motorStartedAt;
+// //     if (!mounted || startedAt == null) return;
+// //
+// //     final elapsed = DateTime.now().difference(startedAt).inSeconds;
+// //     final safeElapsed = elapsed < 0 ? 0 : elapsed;
+// //
+// //     if (safeElapsed != runSeconds) {
+// //       setState(() {
+// //         runSeconds = safeElapsed;
+// //       });
+// //     }
+// //   }
+// //
+// //   void _stopLocalTimer({bool resetStart = true}) {
+// //     runTimer?.cancel();
+// //     runTimer = null;
+// //
+// //     if (resetStart) {
+// //       motorStartedAt = null;
+// //     }
+// //   }
+// //
+// //   String get runningTime {
+// //     final seconds = runSeconds < 0 ? 0 : runSeconds;
+// //     final h = (seconds ~/ 3600).toString().padLeft(2, "0");
+// //     final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, "0");
+// //     final s = (seconds % 60).toString().padLeft(2, "0");
+// //     return "$h:$m:$s";
 // //   }
 // //
 // //   String friendlyError(String? error) {
@@ -1808,9 +1763,7 @@
 // //         text.contains("host lookup") ||
 // //         text.contains("timeout") ||
 // //         text.contains("receive timeout") ||
-// //         text.contains("failed host lookup") ||
-// //         text.contains("connection refused") ||
-// //         text.contains("connection failed")) {
+// //         text.contains("connection refused")) {
 // //       return "No internet connection. Please check Wi-Fi or mobile data.";
 // //     }
 // //
@@ -1819,69 +1772,34 @@
 // //     return error!;
 // //   }
 // //
-// //   Future<void> loadTelemetry({bool showError = false}) async {
-// //     if (isTelemetryLoading) return;
-// //     if (!hasDevice) return;
-// //
-// //     isTelemetryLoading = true;
-// //
-// //     try {
-// //       await ref.read(telemetryViewModelProvider.notifier).loadLatest(deviceId!);
-// //
-// //       if (!mounted) return;
-// //
-// //       final telemetryState = ref.read(telemetryViewModelProvider);
-// //
-// //       if (telemetryState.latest != null) {
-// //         telemetryFailures = 0;
-// //       } else if (telemetryState.error != null) {
-// //         telemetryFailures++;
-// //       }
-// //     } catch (_) {
-// //       telemetryFailures++;
-// //     } finally {
-// //       if (mounted) {
-// //         setState(() {
-// //           isTelemetryLoading = false;
-// //         });
-// //       }
-// //     }
-// //   }
-// //
-// //   void _startLocalTimer() {
-// //     runTimer?.cancel();
-// //     runTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-// //       if (mounted) setState(() => runSeconds++);
-// //     });
-// //   }
-// //
-// //   void _stopLocalTimer() {
-// //     runTimer?.cancel();
-// //     runTimer = null;
-// //   }
-// //
-// //   String get runningTime {
-// //     final seconds = appMotorOn && runSeconds <= 0 ? 1 : runSeconds;
-// //     final h = (seconds ~/ 3600).toString().padLeft(2, "0");
-// //     final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, "0");
-// //     final s = (seconds % 60).toString().padLeft(2, "0");
-// //     return "$h:$m:$s";
-// //   }
-// //
 // //   String formatValue(
 // //       double? value,
 // //       String unit, {
 // //         int decimals = 1,
-// //         required DeviceConnectionStatus status,
 // //       }) {
-// //     if (status == DeviceConnectionStatus.noDevice) return "-- $unit";
+// //     if (!hasDevice) return "-- $unit";
 // //     if (value == null) return "-- $unit";
 // //     return "${value.toStringAsFixed(decimals)} $unit";
 // //   }
 // //
-// //   Future<void> toggleMotor(MotorSnapshot snapshot) async {
+// //   Future<void> toggleMotor() async {
 // //     if (!hasDevice) {
-// //       showMessage("Device not connected. Please select a device first.", true);
+// //       showMessage("Please select a device first.", true);
+// //       return;
+// //     }
+// //
+// //     final latest = ref.read(telemetryViewModelProvider).latest;
+// //
+// //     final deviceOnline = isDeviceOnline(latest);
+// //     final motorRunning = isMotorRunning(latest);
+// //     final telemetryTimestampBeforeCommand = _toInt(latest?.timestamp);
+// //
+// //     if (!deviceOnline) {
+// //       showMessage(
+// //         "Device is offline. Wait for live telemetry before motor control.",
+// //         true,
+// //         seconds: 8,
+// //       );
 // //       return;
 // //     }
 // //
@@ -1889,95 +1807,144 @@
 // //     HapticFeedback.mediumImpact();
 // //
 // //     final typedCustomerName = customerNameController.text.trim();
-// //     final customerName =
-// //     typedCustomerName.isEmpty ? "Mobile App" : typedCustomerName;
 // //     final motorVm = ref.read(motorViewModelProvider.notifier);
 // //
-// //     try {
-// //       if (appMotorOn) {
-// //         final stoppedRunSeconds = runSeconds <= 0 ? 1 : runSeconds;
+// //     // Validate before showing the command spinner.
+// //     if (!motorRunning && typedCustomerName.isEmpty) {
+// //       showMessage("Customer name is required to start motor.", true);
+// //       return;
+// //     }
 // //
+// //     if (mounted) {
+// //       setState(() {
+// //         motorStateBeforePendingCommand = motorRunning;
+// //         isWaitingForVfdConfirmation = true;
+// //       });
+// //     }
+// //
+// //     try {
+// //       if (motorRunning) {
 // //         final stoppedLog = await motorVm.stopMotor(
 // //           deviceId: deviceId!,
-// //           customerName: customerName,
+// //           customerName: activeKhataEntry?.customerName ??
+// //               (typedCustomerName.isEmpty ? "Mobile App" : typedCustomerName),
 // //         );
 // //
-// //         final motorState = ref.read(motorViewModelProvider);
-// //         if (motorState.error != null) {
-// //           showMessage(motorState.error.toString(), true, seconds: 10);
+// //         final updatedMotorState = ref.read(motorViewModelProvider);
+// //
+// //         if (updatedMotorState.error != null) {
+// //           showMessage(updatedMotorState.error!, true, seconds: 10);
+// //           return;
+// //         }
+// //
+// //         final endTime = stoppedLog?.endTime ?? DateTime.now();
+// //
+// //         if (activeKhataEntry != null) {
+// //           await ref.read(khataViewModelProvider.notifier).closeMotorKhataSession(
+// //             entry: activeKhataEntry!,
+// //             endTime: endTime,
+// //           );
+// //
+// //           activeKhataEntry = null;
+// //         }
+// //
+// //         await ref.read(khataViewModelProvider.notifier).loadEntries();
+// //
+// //         // Do NOT show OFF just because the stop API returned successfully.
+// //         // Keep circular progress visible until VFD telemetry itself says OFF.
+// //         final vfdConfirmedOff = await _waitForVfdConfirmation(
+// //           expectedOn: false,
+// //           telemetryTimestampBeforeCommand: telemetryTimestampBeforeCommand,
+// //         );
+// //
+// //         if (!vfdConfirmedOff) {
+// //           showMessage(
+// //             "Stop command was sent, but OFF confirmation was not received from VFD telemetry.",
+// //             true,
+// //             seconds: 10,
+// //           );
 // //           return;
 // //         }
 // //
 // //         _stopLocalTimer();
 // //
-// //         setState(() {
-// //           appMotorOn = false;
-// //           runSource = MotorRunSource.none;
-// //           runSeconds = 0;
-// //         });
-// //
-// //         if (stoppedLog != null) {
-// //           await ref
-// //               .read(khataViewModelProvider.notifier)
-// //               .createFromMotorLog(
-// //             log: stoppedLog,
-// //             customerName: customerName,
-// //             deviceId: deviceId!,
-// //             pricePerHour: 0,
-// //             cashReceived: 0,
-// //             fallbackRunSeconds: stoppedRunSeconds,
-// //           );
+// //         if (mounted) {
+// //           setState(() {
+// //             runSeconds = 0;
+// //           });
 // //         }
 // //
-// //         await loadTelemetry(showError: false);
-// //         await ref.read(khataViewModelProvider.notifier).loadEntries();
-// //
-// //         final khataState = ref.read(khataViewModelProvider);
-// //         if (khataState.error != null) {
-// //           showMessage(
-// //             "Motor stopped, but Khata was not created: ${khataState.error}",
-// //             true,
-// //             seconds: 12,
-// //           );
-// //           return;
-// //         }
-// //
-// //         showMessage("Motor stopped. Khata entry created.", false);
+// //         showMessage("Motor stopped. Khata session closed.", false);
 // //         return;
 // //       }
 // //
-// //       if (typedCustomerName.isEmpty) {
-// //         showMessage("Customer name is required to start motor.", true);
-// //         return;
-// //       }
-// //
-// //       await motorVm.startMotor(
+// //       final startedLog = await motorVm.startMotor(
 // //         deviceId: deviceId!,
 // //         customerName: typedCustomerName,
 // //       );
 // //
-// //       final motorState = ref.read(motorViewModelProvider);
-// //       if (motorState.error != null) {
-// //         showMessage(motorState.error.toString(), true, seconds: 10);
+// //       final motorCommandStartedAt = startedLog?.startTime ?? DateTime.now();
+// //
+// //       final updatedMotorState = ref.read(motorViewModelProvider);
+// //
+// //       if (updatedMotorState.error != null) {
+// //         showMessage(updatedMotorState.error!, true, seconds: 10);
 // //         return;
 // //       }
 // //
-// //       setState(() {
-// //         appMotorOn = true;
-// //         runSource = MotorRunSource.appButton;
-// //         runSeconds = 0;
-// //       });
+// //       if (startedLog != null) {
+// //         activeKhataEntry =
+// //         await ref.read(khataViewModelProvider.notifier).startMotorKhataSession(
+// //           customerName: typedCustomerName,
+// //           deviceId: deviceId!,
+// //           motorLogId: startedLog.id ?? "",
+// //           startTime: startedLog.startTime ?? motorCommandStartedAt,
+// //         );
+// //       }
 // //
-// //       _startLocalTimer();
-// //       await loadTelemetry(showError: false);
+// //       await ref.read(khataViewModelProvider.notifier).loadEntries();
 // //
-// //       showMessage("Motor started successfully", false);
+// //       // Do NOT show ON just because the start API returned successfully.
+// //       // Keep circular progress visible until VFD telemetry itself says ON.
+// //       final vfdConfirmedOn = await _waitForVfdConfirmation(
+// //         expectedOn: true,
+// //         telemetryTimestampBeforeCommand: telemetryTimestampBeforeCommand,
+// //       );
+// //
+// //       if (!vfdConfirmedOn) {
+// //         showMessage(
+// //           "Start command was sent, but ON confirmation was not received from VFD telemetry.",
+// //           true,
+// //           seconds: 10,
+// //         );
+// //         return;
+// //       }
+// //
+// //       if (mounted) {
+// //         setState(() {
+// //           runSeconds = 0;
+// //         });
+// //       }
+// //
+// //       _startLocalTimer(startedAt: motorCommandStartedAt);
+// //
+// //       showMessage("Motor started. Khata session opened.", false);
 // //     } catch (e) {
 // //       showMessage(
 // //         "Motor action failed: ${friendlyError(e.toString())}",
 // //         true,
 // //         seconds: 12,
 // //       );
+// //     } finally {
+// //       if (mounted) {
+// //         setState(() {
+// //           isWaitingForVfdConfirmation = false;
+// //           motorStateBeforePendingCommand = null;
+// //         });
+// //       } else {
+// //         isWaitingForVfdConfirmation = false;
+// //         motorStateBeforePendingCommand = null;
+// //       }
 // //     }
 // //   }
 // //
@@ -1991,8 +1958,9 @@
 // //           duration: Duration(seconds: isError ? seconds : 4),
 // //           behavior: SnackBarBehavior.floating,
 // //           margin: const EdgeInsets.all(16),
-// //           shape:
-// //           RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+// //           shape: RoundedRectangleBorder(
+// //             borderRadius: BorderRadius.circular(14),
+// //           ),
 // //           backgroundColor: isError ? AppColors.error : AppColors.green,
 // //           content: Text(
 // //             isError ? friendlyError(text) : text,
@@ -2009,34 +1977,76 @@
 // //     if (!hasDevice) return <String>[];
 // //
 // //     final khataState = ref.watch(khataViewModelProvider);
-// //     final names = <String>{};
+// //     final names = <String>[];
+// //     final seen = <String>{};
 // //
-// //     for (final entry in khataState.entries) {
+// //     // Newest customers first. Duplicate names are removed case-insensitively.
+// //     for (final entry in khataState.entries.reversed) {
 // //       final name = entry.customerName?.trim();
-// //       if (name != null && name.isNotEmpty) names.add(name);
+// //       if (name == null || name.isEmpty) continue;
+// //
+// //       final key = name.toLowerCase();
+// //       if (seen.add(key)) {
+// //         names.add(name);
+// //       }
 // //     }
 // //
-// //     final list = names.toList();
-// //     list.sort();
-// //     return list;
+// //     return names.take(20).toList();
 // //   }
 // //
 // //   @override
 // //   Widget build(BuildContext context) {
-// //     final motorState = ref.watch(motorViewModelProvider);
-// //     final telemetryState = ref.watch(telemetryViewModelProvider);
-// //     final latest = hasDevice ? telemetryState.latest : null;
-// //     final status = connectionStatus(latest);
-// //
-// //     final snapshot = MotorSnapshot.fromAppState(
-// //       appMotorOn: hasDevice && appMotorOn,
-// //       latest: latest,
-// //       runSource: runSource,
-// //       status: status,
+// //     final latest = ref.watch(
+// //       telemetryViewModelProvider.select((state) => state.latest),
 // //     );
 // //
-// //     final size = MediaQuery.of(context).size;
-// //     final width = size.width;
+// //     final motorLoading = ref.watch(
+// //       motorViewModelProvider.select((state) => state.isLoading),
+// //     );
+// //
+// //     final motorButtonLoading =
+// //         hasDevice && (motorLoading || isWaitingForVfdConfirmation);
+// //
+// //     final checkingDevice = hasDevice && !firstTelemetryLoaded;
+// //
+// //     final effectiveLatest = hasDevice && firstTelemetryLoaded ? latest : null;
+// //
+// //     final deviceOnline = checkingDevice ? false : isDeviceOnline(effectiveLatest);
+// //     final telemetryMotorRunning =
+// //     checkingDevice ? false : isMotorRunning(effectiveLatest);
+// //
+// //     final motorRunning = isWaitingForVfdConfirmation &&
+// //         motorStateBeforePendingCommand != null
+// //         ? motorStateBeforePendingCommand!
+// //         : telemetryMotorRunning;
+// //
+// //     final displayLatest = deviceOnline ? effectiveLatest : null;
+// //
+// //     if (motorRunning && runTimer == null && !isWaitingForVfdConfirmation) {
+// //       WidgetsBinding.instance.addPostFrameCallback((_) {
+// //         if (mounted && runTimer == null) {
+// //           _startLocalTimer();
+// //         }
+// //       });
+// //     }
+// //
+// //     // Never reset the run timer just because telemetry becomes stale while
+// //     // the app is backgrounded. Stop it only when fresh VFD telemetry says OFF.
+// //     if (deviceOnline &&
+// //         !telemetryMotorRunning &&
+// //         runTimer != null &&
+// //         !isWaitingForVfdConfirmation) {
+// //       WidgetsBinding.instance.addPostFrameCallback((_) {
+// //         if (mounted && runTimer != null) {
+// //           _stopLocalTimer();
+// //           setState(() {
+// //             runSeconds = 0;
+// //           });
+// //         }
+// //       });
+// //     }
+// //
+// //     final width = MediaQuery.of(context).size.width;
 // //
 // //     final isVerySmall = width < 360;
 // //     final isTablet = width >= 650;
@@ -2068,243 +2078,176 @@
 // //         ? 176.0
 // //         : 196.0;
 // //
-// //     // ✅ Resolved display name: prefer deviceName, fall back to deviceId
-// //     final resolvedDisplayName = (deviceName != null && deviceName!.isNotEmpty)
+// //     final resolvedDisplayName = deviceName != null && deviceName!.isNotEmpty
 // //         ? deviceName!
-// //         : (hasDevice ? deviceId! : "Device not connected");
+// //         : hasDevice
+// //         ? deviceId!
+// //         : "Smart Motor Controller";
 // //
 // //     return Scaffold(
 // //       backgroundColor: AppColors.darkBgSoft,
 // //       drawer: hasDevice ? ProfessionalDrawer(deviceId: deviceId!) : null,
-// //       appBar: AppBar(
-// //         backgroundColor: AppColors.darkSurfaceSoft,
-// //         elevation: 0,
-// //         centerTitle: true,
-// //         iconTheme: const IconThemeData(color: AppColors.white),
-// //         title: Column(
-// //           mainAxisSize: MainAxisSize.min,
-// //           children: [
-// //             Text(
-// //               "SmartWell VFD",
-// //               maxLines: 1,
-// //               overflow: TextOverflow.ellipsis,
-// //               style: TextStyle(
-// //                 color: AppColors.white,
-// //                 fontSize: isVerySmall ? 18 : 21,
-// //                 fontWeight: FontWeight.w900,
-// //               ),
-// //             ),
-// //             const SizedBox(height: 2),
-// //             // ✅ AppBar subtitle: show deviceName if available, else deviceId
-// //             Text(
-// //               resolvedDisplayName,
-// //               maxLines: 1,
-// //               overflow: TextOverflow.ellipsis,
-// //               style: TextStyle(
-// //                 color: status == DeviceConnectionStatus.connected
-// //                     ? AppColors.primary.withOpacity(0.88)
-// //                     : AppColors.warning,
-// //                 fontSize: isVerySmall ? 10 : 11,
-// //                 fontWeight: FontWeight.w700,
-// //               ),
-// //             ),
-// //           ],
-// //         ),
-// //         actions: [
-// //           IconButton(
-// //             tooltip: "Change device",
-// //             onPressed: () {
-// //               Navigator.pushReplacementNamed(context, AppRoutes.devices);
-// //             },
-// //             icon: const Icon(Icons.devices_other_rounded),
-// //           ),
-// //         ],
+// //       appBar: SmartWellHomeAppBar(
+// //         hasDevice: hasDevice,
+// //         deviceOnline: deviceOnline,
+// //         onSelectDevice: () {
+// //           Navigator.pushReplacementNamed(context, AppRoutes.devices);
+// //         },
 // //       ),
 // //       body: SafeArea(
 // //         child: RefreshIndicator(
+// //           color: AppColors.primary,
+// //           backgroundColor: AppColors.cardDark,
 // //           onRefresh: () async {
 // //             if (hasDevice) {
-// //               await loadTelemetry();
+// //               await loadTelemetry(showError: true);
 // //             } else {
-// //               showMessage(
-// //                   "Device not connected. Please select a device.", true);
+// //               showMessage("Please select a device first.", true);
 // //             }
 // //           },
-// //           color: AppColors.primary,
-// //           backgroundColor: AppColors.surfaceDark,
 // //           child: SingleChildScrollView(
 // //             physics: const AlwaysScrollableScrollPhysics(
-// //                 parent: BouncingScrollPhysics()),
+// //               parent: BouncingScrollPhysics(),
+// //             ),
 // //             padding: EdgeInsets.symmetric(
-// //                 horizontal: horizontalPadding, vertical: 18),
+// //               horizontal: horizontalPadding,
+// //               vertical: 18,
+// //             ),
 // //             child: Center(
 // //               child: ConstrainedBox(
 // //                 constraints: const BoxConstraints(maxWidth: 1080),
 // //                 child: Column(
 // //                   crossAxisAlignment: CrossAxisAlignment.stretch,
 // //                   children: [
-// //                     // ✅ Pass resolvedDisplayName to VfdHeaderCard
-// //                     VfdHeaderCard(
+// //                     SmartDeviceHeaderCard(
+// //                       hasDevice: hasDevice,
+// //                       deviceOnline: deviceOnline,
+// //                       motorRunning: motorRunning,
 // //                       displayName: resolvedDisplayName,
-// //                       snapshot: snapshot,
-// //                       frequencyText: formatValue(
-// //                         latest?.freq,
-// //                         "Hz",
-// //                         decimals: 1,
-// //                         status: status,
-// //                       ),
-// //                       referenceFrequencyText: formatValue(
-// //                         latest?.referenceFreq ?? latest?.freq,
-// //                         "Hz",
-// //                         decimals: 1,
-// //                         status: status,
-// //                       ),
+// //                       deviceId: deviceId,
 // //                     ),
-// //                     if (status == DeviceConnectionStatus.noDevice)
-// //                       const Padding(
-// //                         padding: EdgeInsets.only(top: 10),
-// //                         child: DeviceNotConnectedBadge(),
+// //                     if (!hasDevice) ...[
+// //                       const SizedBox(height: 12),
+// //                       NoDeviceProfessionalNotice(
+// //                         onSelectDevice: () {
+// //                           Navigator.pushReplacementNamed(
+// //                             context,
+// //                             AppRoutes.devices,
+// //                           );
+// //                         },
 // //                       ),
-// //                     if (status == DeviceConnectionStatus.waitingTelemetry)
-// //                       const Padding(
-// //                         padding: EdgeInsets.only(top: 10),
-// //                         child: WaitingTelemetryBadge(),
+// //                     ],
+// //                     if (hasDevice && !deviceOnline) ...[
+// //                       const SizedBox(height: 12),
+// //                       DeviceOfflineNotice(
+// //                         onRetry: () => loadTelemetry(showError: true),
 // //                       ),
-// //                     if (status == DeviceConnectionStatus.disconnected)
-// //                       const Padding(
-// //                         padding: EdgeInsets.only(top: 10),
-// //                         child: DeviceDisconnectedBadge(),
+// //                     ],
+// //                     if (hasDevice && deviceOnline) ...[
+// //                       const SizedBox(height: 12),
+// //                       DeviceOnlineNotice(
+// //                         motorRunning: motorRunning,
 // //                       ),
-// //                     const SizedBox(height: 16),
-// //                     StatusPanel(
-// //                         snapshot: snapshot, pulseAnimation: pulseAnimation),
-// //                     const SizedBox(height: 16),
-// //                     SystemBanner(snapshot: snapshot),
-// //                     if (snapshot.hasFault && !snapshot.hasTelemetryError) ...[
-// //                       const SizedBox(height: 14),
-// //                       FaultAlertCard(snapshot: snapshot),
 // //                     ],
 // //                     const SizedBox(height: 18),
-// //                     CustomerNameField(
+// //                     CustomerNameInputCard(
 // //                       controller: customerNameController,
 // //                       focusNode: customerNameFocusNode,
 // //                       suggestions: customerSuggestions(),
-// //                       enabled: hasDevice,
+// //                       enabled: hasDevice && deviceOnline,
 // //                     ),
 // //                     const SizedBox(height: 26),
 // //                     Center(
 // //                       child: GestureDetector(
-// //                         onTap: motorState.isLoading
-// //                             ? null
-// //                             : () => toggleMotor(snapshot),
+// //                         onTap: motorButtonLoading ? null : toggleMotor,
 // //                         child: AnimatedBuilder(
 // //                           animation: pulseAnimation,
 // //                           builder: (context, child) {
-// //                             final scale = snapshot.isRunning
+// //                             final scale = motorButtonLoading
+// //                                 ? 1.0
+// //                                 : motorRunning
 // //                                 ? 1.0 + ((pulseAnimation.value - 1.0) * 0.28)
 // //                                 : 1.0;
-// //                             return Transform.scale(scale: scale, child: child);
+// //
+// //                             return Transform.scale(
+// //                               scale: scale,
+// //                               child: child,
+// //                             );
 // //                           },
-// //                           child: MotorButton(
-// //                             snapshot: snapshot,
-// //                             loading: hasDevice && motorState.isLoading,
+// //                           child: MotorCommandButton(
+// //                             hasDevice: hasDevice,
+// //                             deviceOnline: deviceOnline,
+// //                             isOn: motorRunning,
+// //                             loading: motorButtonLoading,
 // //                             size: buttonSize,
 // //                           ),
 // //                         ),
 // //                       ),
 // //                     ),
 // //                     const SizedBox(height: 18),
-// //                     Center(
-// //                       child: Text(
-// //                         snapshot.isRunning
-// //                             ? "${snapshot.runSourceText} | $runningTime"
-// //                             : snapshot.centerStatusText,
-// //                         textAlign: TextAlign.center,
-// //                         style: TextStyle(
-// //                           color: AppColors.white.withOpacity(0.76),
-// //                           fontSize: isVerySmall ? 14 : 16,
-// //                           fontWeight: FontWeight.w700,
-// //                         ),
-// //                       ),
+// //                     MotorRunStatusCard(
+// //                       hasDevice: hasDevice,
+// //                       deviceOnline: deviceOnline,
+// //                       isOn: motorRunning,
+// //                       waitingForVfd: isWaitingForVfdConfirmation,
+// //                       runningTime: runningTime,
 // //                     ),
 // //                     const SizedBox(height: 22),
-// //                     if (hasDevice &&
-// //                         telemetryState.isLoading &&
-// //                         latest == null)
-// //                       const Padding(
-// //                         padding: EdgeInsets.all(22),
-// //                         child: Center(
-// //                           child: CircularProgressIndicator(
-// //                               color: AppColors.white),
-// //                         ),
-// //                       ),
-// //                     const SizedBox(height: 14),
-// //                     GridView.count(
-// //                       shrinkWrap: true,
-// //                       physics: const NeverScrollableScrollPhysics(),
+// //                     ParameterGridSection(
 // //                       crossAxisCount: crossAxisCount,
-// //                       crossAxisSpacing: 14,
-// //                       mainAxisSpacing: 14,
 // //                       childAspectRatio: childAspectRatio,
-// //                       children: [
-// //                         MetricCard(
+// //                       metrics: [
+// //                         ParameterMetric(
 // //                           icon: Icons.sync_rounded,
 // //                           title: "Frequency",
-// //                           value: formatValue(latest?.freq, "Hz",
-// //                               status: status),
+// //                           value: formatValue(displayLatest?.freq, "Hz"),
 // //                           highlight: true,
 // //                         ),
-// //                         MetricCard(
+// //                         ParameterMetric(
 // //                           icon: Icons.bolt_rounded,
 // //                           title: "Voltage",
-// //                           value: formatValue(latest?.voltage, "V",
-// //                               status: status),
+// //                           value: formatValue(displayLatest?.voltage, "V"),
 // //                         ),
-// //                         MetricCard(
+// //                         ParameterMetric(
 // //                           icon: Icons.flash_on_rounded,
 // //                           title: "Current",
-// //                           value: formatValue(latest?.current, "A",
-// //                               status: status),
+// //                           value: formatValue(displayLatest?.current, "A"),
 // //                         ),
-// //                         MetricCard(
+// //                         ParameterMetric(
 // //                           icon: Icons.power_rounded,
 // //                           title: "Power",
-// //                           value: formatValue(latest?.power, "kW",
-// //                               status: status),
+// //                           value: formatValue(displayLatest?.power, "kW"),
 // //                         ),
-// //                         MetricCard(
+// //                         ParameterMetric(
 // //                           icon: Icons.speed_rounded,
 // //                           title: "Load",
-// //                           value: formatValue(latest?.powerPercent, "%",
-// //                               status: status),
+// //                           value: formatValue(
+// //                             displayLatest?.powerPercent,
+// //                             "%",
+// //                           ),
 // //                         ),
-// //                         MetricCard(
+// //                         ParameterMetric(
 // //                           icon: Icons.rotate_right_rounded,
 // //                           title: "Motor Speed",
-// //                           value: formatValue(latest?.motorSpeed, "RPM",
-// //                               status: status),
+// //                           value: formatValue(
+// //                             displayLatest?.motorSpeed,
+// //                             "RPM",
+// //                           ),
 // //                         ),
-// //                         MetricCard(
+// //                         ParameterMetric(
 // //                           icon: Icons.battery_charging_full_rounded,
 // //                           title: "DC Bus",
-// //                           value: formatValue(latest?.dcbus, "V",
-// //                               status: status),
+// //                           value: formatValue(displayLatest?.dcbus, "V"),
 // //                         ),
-// //                         MetricCard(
+// //                         ParameterMetric(
 // //                           icon: Icons.electric_meter_rounded,
 // //                           title: "Energy",
-// //                           value: formatValue(latest?.energyIn, "kWh",
-// //                               status: status),
+// //                           value: formatValue(
+// //                             displayLatest?.energyIn,
+// //                             "kWh",
+// //                           ),
 // //                         ),
 // //                       ],
-// //                     ),
-// //                     const SizedBox(height: 20),
-// //                     // ✅ Pass both deviceName and deviceId to DeviceSessionCard
-// //                     DeviceSessionCard(
-// //                       deviceName: deviceName,
-// //                       deviceId: deviceId,
-// //                       snapshot: snapshot,
-// //                       timestamp: latest?.timestamp,
 // //                     ),
 // //                   ],
 // //                 ),
@@ -2317,283 +2260,172 @@
 // //   }
 // // }
 // //
-// // // ─────────────────────────────────────────────
-// // // MotorSnapshot
-// // // ─────────────────────────────────────────────
+// // class SmartWellHomeAppBar extends StatelessWidget
+// //     implements PreferredSizeWidget {
+// //   final bool hasDevice;
+// //   final bool deviceOnline;
+// //   final VoidCallback onSelectDevice;
 // //
-// // class MotorSnapshot {
-// //   final bool isRunning;
-// //   final bool hasFault;
-// //   final bool hasTelemetryError;
-// //   final int? statusCode;
-// //   final int? faultCode;
-// //   final int? isLive;
-// //   final MotorRunSource runSource;
-// //   final DeviceConnectionStatus connectionStatus;
-// //
-// //   const MotorSnapshot({
-// //     required this.isRunning,
-// //     required this.hasFault,
-// //     required this.hasTelemetryError,
-// //     required this.statusCode,
-// //     required this.faultCode,
-// //     required this.isLive,
-// //     required this.runSource,
-// //     required this.connectionStatus,
+// //   const SmartWellHomeAppBar({
+// //     super.key,
+// //     required this.hasDevice,
+// //     required this.deviceOnline,
+// //     required this.onSelectDevice,
 // //   });
 // //
-// //   bool get hasDevice => connectionStatus != DeviceConnectionStatus.noDevice;
+// //   @override
+// //   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 // //
-// //   factory MotorSnapshot.fromAppState({
-// //     required bool appMotorOn,
-// //     required dynamic latest,
-// //     required MotorRunSource runSource,
-// //     required DeviceConnectionStatus status,
-// //   }) {
-// //     final int? statusCode = latest?.statusCode;
-// //     final int? faultCode = latest?.faultCode;
-// //     final int? fault = latest?.fault;
-// //     final int? isLive = latest?.isLive;
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     final statusText = !hasDevice
+// //         ? "No device selected"
+// //         : deviceOnline
+// //         ? "Device online"
+// //         : "Waiting for device";
 // //
-// //     final hasFault = status == DeviceConnectionStatus.connected &&
-// //         ((fault ?? 0) == 1 || (faultCode ?? 0) > 0 || statusCode == 4);
+// //     final statusColor = !hasDevice
+// //         ? AppColors.white.withOpacity(0.55)
+// //         : deviceOnline
+// //         ? AppColors.green
+// //         : AppColors.warning;
 // //
-// //     final resolvedSource = appMotorOn
-// //         ? (runSource == MotorRunSource.none
-// //         ? MotorRunSource.appButton
-// //         : runSource)
-// //         : MotorRunSource.none;
-// //
-// //     return MotorSnapshot(
-// //       isRunning: status == DeviceConnectionStatus.connected && appMotorOn,
-// //       hasFault: hasFault,
-// //       hasTelemetryError: status == DeviceConnectionStatus.disconnected,
-// //       statusCode: latest == null ? null : statusCode,
-// //       faultCode: latest == null ? null : faultCode,
-// //       isLive: latest == null ? null : isLive,
-// //       runSource: resolvedSource,
-// //       connectionStatus: status,
+// //     return AppBar(
+// //       backgroundColor: AppColors.primaryDark,
+// //       elevation: 0,
+// //       centerTitle: false,
+// //       automaticallyImplyLeading: hasDevice,
+// //       iconTheme: const IconThemeData(color: AppColors.white),
+// //       titleSpacing: 18,
+// //       title: Row(
+// //         children: [
+// //           Container(
+// //             height: 42,
+// //             width: 42,
+// //             decoration: BoxDecoration(
+// //               borderRadius: BorderRadius.circular(14),
+// //               gradient: LinearGradient(
+// //                 colors: [
+// //                   AppColors.darkBgSoft,
+// //                   AppColors.darkBgSoft.withOpacity(0.72),
+// //                 ],
+// //               ),
+// //             ),
+// //             child: const Icon(
+// //               Icons.electric_bolt_rounded,
+// //               color: AppColors.white,
+// //               size: 24,
+// //             ),
+// //           ),
+// //           const SizedBox(width: 14),
+// //           Expanded(
+// //             child: Column(
+// //               crossAxisAlignment: CrossAxisAlignment.start,
+// //               mainAxisSize: MainAxisSize.min,
+// //               children: [
+// //                 const Text(
+// //                   "AabNex",
+// //                   maxLines: 1,
+// //                   overflow: TextOverflow.ellipsis,
+// //                   style: TextStyle(
+// //                     color: AppColors.white,
+// //                     fontSize: 20,
+// //                     fontWeight: FontWeight.w900,
+// //                   ),
+// //                 ),
+// //                 const SizedBox(height: 2),
+// //                 Text(
+// //                   statusText,
+// //                   maxLines: 1,
+// //                   overflow: TextOverflow.ellipsis,
+// //                   style: TextStyle(
+// //                     color: statusColor,
+// //                     fontSize: 11.5,
+// //                     fontWeight: FontWeight.w800,
+// //                   ),
+// //                 ),
+// //               ],
+// //             ),
+// //           ),
+// //         ],
+// //       ),
+// //       actions: [
+// //         Padding(
+// //           padding: const EdgeInsets.only(right: 10),
+// //           child: IconButton(
+// //             tooltip: "Select Device",
+// //             onPressed: onSelectDevice,
+// //             icon: Container(
+// //               padding: const EdgeInsets.all(10),
+// //               decoration: BoxDecoration(
+// //                 color: AppColors.cardDark,
+// //                 borderRadius: BorderRadius.circular(14),
+// //                 border: Border.all(color: AppColors.borderDark),
+// //               ),
+// //               child: const Icon(
+// //                 Icons.devices_other_rounded,
+// //                 color: AppColors.primary,
+// //                 size: 22,
+// //               ),
+// //             ),
+// //           ),
+// //         ),
+// //       ],
 // //     );
-// //   }
-// //
-// //   String get statusName {
-// //     switch (connectionStatus) {
-// //       case DeviceConnectionStatus.noDevice:
-// //         return "Device Not Connected";
-// //       case DeviceConnectionStatus.waitingTelemetry:
-// //         return "Waiting for Telemetry";
-// //       case DeviceConnectionStatus.disconnected:
-// //         return "Device Disconnected";
-// //       case DeviceConnectionStatus.connected:
-// //         break;
-// //     }
-// //
-// //     if (hasFault) return "Fault Active";
-// //     if (isRunning && statusCode == 1) return "Forward Running";
-// //     if (isRunning && statusCode == 2) return "Reverse Running";
-// //     if (isRunning) return "VFD Running";
-// //     if (statusCode == 3) return "Standby";
-// //     if (statusCode == 5) return "VFD Off";
-// //     return "System Ready";
-// //   }
-// //
-// //   String get centerStatusText {
-// //     switch (connectionStatus) {
-// //       case DeviceConnectionStatus.noDevice:
-// //         return "Device not connected";
-// //       case DeviceConnectionStatus.waitingTelemetry:
-// //         return "Waiting for live readings";
-// //       case DeviceConnectionStatus.disconnected:
-// //         return "Device disconnected";
-// //       case DeviceConnectionStatus.connected:
-// //         break;
-// //     }
-// //
-// //     if (hasFault) return faultName;
-// //     if (isRunning) return runSourceText;
-// //     if (statusCode == 5) return "VFD Off";
-// //     return "System Ready";
-// //   }
-// //
-// //   String get runSourceText {
-// //     if (!isRunning) return "Stopped";
-// //     if (runSource == MotorRunSource.appButton) return "Run by App Button";
-// //     if (runSource == MotorRunSource.physicalButton) {
-// //       return "Run by Physical Button";
-// //     }
-// //     return "Running";
-// //   }
-// //
-// //   Color get bannerColor {
-// //     switch (connectionStatus) {
-// //       case DeviceConnectionStatus.noDevice:
-// //         return AppColors.warning;
-// //       case DeviceConnectionStatus.waitingTelemetry:
-// //         return AppColors.primary;
-// //       case DeviceConnectionStatus.disconnected:
-// //         return AppColors.warning;
-// //       case DeviceConnectionStatus.connected:
-// //         break;
-// //     }
-// //
-// //     if (hasFault) return AppColors.error;
-// //     if (isRunning && runSource == MotorRunSource.physicalButton) {
-// //       return AppColors.accent;
-// //     }
-// //     if (isRunning) return AppColors.green;
-// //     if (statusCode == 5) return AppColors.blueDark;
-// //     return AppColors.primary;
-// //   }
-// //
-// //   IconData get bannerIcon {
-// //     switch (connectionStatus) {
-// //       case DeviceConnectionStatus.noDevice:
-// //         return Icons.link_off_rounded;
-// //       case DeviceConnectionStatus.waitingTelemetry:
-// //         return Icons.sync_rounded;
-// //       case DeviceConnectionStatus.disconnected:
-// //         return Icons.wifi_off_rounded;
-// //       case DeviceConnectionStatus.connected:
-// //         break;
-// //     }
-// //
-// //     if (hasFault) return Icons.warning_amber_rounded;
-// //     if (isRunning && runSource == MotorRunSource.physicalButton) {
-// //       return Icons.radio_button_checked_rounded;
-// //     }
-// //     if (isRunning) return Icons.check_circle_rounded;
-// //     if (statusCode == 5) return Icons.power_off_rounded;
-// //     return Icons.verified_rounded;
-// //   }
-// //
-// //   String get faultName {
-// //     switch (faultCode ?? 0) {
-// //       case 0:
-// //         return "No Fault";
-// //       case 1:
-// //         return "OUT1";
-// //       case 2:
-// //         return "OUT2";
-// //       case 3:
-// //         return "OUT3";
-// //       case 4:
-// //         return "OC1";
-// //       case 5:
-// //         return "OC2";
-// //       case 6:
-// //         return "OC3";
-// //       case 7:
-// //         return "OV1";
-// //       case 8:
-// //         return "OV2";
-// //       case 9:
-// //         return "OV3";
-// //       case 10:
-// //         return "UV";
-// //       case 11:
-// //         return "OL1";
-// //       case 12:
-// //         return "OL2";
-// //       case 13:
-// //         return "SPI";
-// //       case 14:
-// //         return "SPO";
-// //       case 15:
-// //         return "OH1";
-// //       case 16:
-// //         return "OH2";
-// //       case 17:
-// //         return "EF";
-// //       case 18:
-// //         return "CE";
-// //       case 19:
-// //         return "ItE";
-// //       default:
-// //         return "Unknown Fault";
-// //     }
-// //   }
-// //
-// //   String get faultDescription {
-// //     switch (faultCode ?? 0) {
-// //       case 0:
-// //         return "Drive operating normally.";
-// //       case 1:
-// //         return "Output phase fault. Check motor cable, output terminal, or missing motor phase.";
-// //       case 2:
-// //         return "Output abnormality. Check motor short circuit or output wiring.";
-// //       case 3:
-// //         return "Output phase imbalance. Check open phase or motor winding damage.";
-// //       case 4:
-// //         return "Acceleration overcurrent. Check acceleration time, heavy load, or jammed motor.";
-// //       case 5:
-// //         return "Deceleration overcurrent. Check deceleration time or high inertia load.";
-// //       case 6:
-// //         return "Constant speed overcurrent. Check mechanical overload or motor current.";
-// //       case 7:
-// //         return "Acceleration overvoltage. DC bus voltage is too high during acceleration.";
-// //       case 8:
-// //         return "Deceleration overvoltage. Check fast deceleration or braking resistor.";
-// //       case 9:
-// //         return "Constant overvoltage. Check supply voltage.";
-// //       case 10:
-// //         return "Under voltage. Check weak supply or loose input cable.";
-// //       case 11:
-// //         return "Motor overload. Current stayed too high for long duration.";
-// //       case 12:
-// //         return "Drive overload. Load may exceed VFD capacity.";
-// //       case 13:
-// //         return "Internal communication fault.";
-// //       case 14:
-// //         return "Output protection triggered.";
-// //       case 15:
-// //         return "Drive overheat. Check cooling fan and ventilation.";
-// //       case 16:
-// //         return "Motor overheat. Motor thermal protection triggered.";
-// //       case 17:
-// //         return "External fault. External safety device triggered.";
-// //       case 18:
-// //         return "Communication error.";
-// //       case 19:
-// //         return "Current detection error.";
-// //       default:
-// //         return "Unknown fault code.";
-// //     }
 // //   }
 // // }
 // //
-// // // ─────────────────────────────────────────────
-// // // VfdHeaderCard  ← now takes displayName instead of deviceId
-// // // ─────────────────────────────────────────────
-// //
-// // class VfdHeaderCard extends StatelessWidget {
-// //   // ✅ Renamed: receives the already-resolved display name
+// // class SmartDeviceHeaderCard extends StatelessWidget {
+// //   final bool hasDevice;
+// //   final bool deviceOnline;
+// //   final bool motorRunning;
 // //   final String displayName;
-// //   final MotorSnapshot snapshot;
-// //   final String frequencyText;
-// //   final String referenceFrequencyText;
+// //   final String? deviceId;
 // //
-// //   const VfdHeaderCard({
+// //   const SmartDeviceHeaderCard({
 // //     super.key,
+// //     required this.hasDevice,
+// //     required this.deviceOnline,
+// //     required this.motorRunning,
 // //     required this.displayName,
-// //     required this.snapshot,
-// //     required this.frequencyText,
-// //     required this.referenceFrequencyText,
+// //     required this.deviceId,
 // //   });
 // //
 // //   @override
 // //   Widget build(BuildContext context) {
-// //     final width = MediaQuery.of(context).size.width;
-// //     final compact = width < 390;
+// //     final color = !hasDevice
+// //         ? AppColors.primary
+// //         : !deviceOnline
+// //         ? AppColors.warning
+// //         : motorRunning
+// //         ? AppColors.green
+// //         : AppColors.primary;
+// //
+// //     final icon = !hasDevice
+// //         ? Icons.hub_outlined
+// //         : !deviceOnline
+// //         ? Icons.wifi_tethering_error_rounded
+// //         : motorRunning
+// //         ? Icons.power_settings_new_rounded
+// //         : Icons.verified_rounded;
+// //
+// //     final statusText = !hasDevice
+// //         ? "Ready to connect"
+// //         : !deviceOnline
+// //         ? "Waiting for live telemetry"
+// //         : motorRunning
+// //         ? "Device online | Motor ON"
+// //         : "Device online | Motor OFF";
 // //
 // //     return Container(
-// //       padding: EdgeInsets.all(compact ? 15 : 18),
+// //       padding: const EdgeInsets.all(18),
 // //       decoration: BoxDecoration(
 // //         color: AppColors.cardDark,
 // //         borderRadius: BorderRadius.circular(26),
 // //         border: Border.all(color: AppColors.borderDark),
 // //         boxShadow: [
 // //           BoxShadow(
-// //             color: AppColors.primary.withOpacity(0.10),
+// //             color: color.withOpacity(0.10),
 // //             blurRadius: 28,
 // //             offset: const Offset(0, 14),
 // //           ),
@@ -2602,16 +2434,16 @@
 // //       child: Row(
 // //         children: [
 // //           Container(
-// //             height: compact ? 54 : 62,
-// //             width: compact ? 54 : 62,
+// //             height: 62,
+// //             width: 62,
 // //             decoration: BoxDecoration(
-// //               color: snapshot.bannerColor.withOpacity(0.14),
+// //               color: color.withOpacity(0.14),
 // //               borderRadius: BorderRadius.circular(20),
 // //             ),
 // //             child: Icon(
-// //               snapshot.bannerIcon,
-// //               color: snapshot.bannerColor,
-// //               size: compact ? 28 : 32,
+// //               icon,
+// //               color: color,
+// //               size: 32,
 // //             ),
 // //           ),
 // //           const SizedBox(width: 14),
@@ -2619,178 +2451,57 @@
 // //             child: Column(
 // //               crossAxisAlignment: CrossAxisAlignment.start,
 // //               children: [
-// //                 // ✅ Uses displayName (deviceName if set, else deviceId)
 // //                 Text(
 // //                   displayName,
 // //                   maxLines: 1,
 // //                   overflow: TextOverflow.ellipsis,
-// //                   style: TextStyle(
+// //                   style: const TextStyle(
 // //                     color: AppColors.white,
-// //                     fontSize: compact ? 15 : 17,
+// //                     fontSize: 17,
 // //                     fontWeight: FontWeight.w900,
 // //                   ),
 // //                 ),
 // //                 const SizedBox(height: 6),
 // //                 Text(
-// //                   snapshot.statusName,
+// //                   statusText,
+// //                   style: TextStyle(
+// //                     color: color,
+// //                     fontSize: 14,
+// //                     fontWeight: FontWeight.w800,
+// //                   ),
+// //                 ),
+// //                 const SizedBox(height: 5),
+// //                 Text(
+// //                   hasDevice ? deviceId! : "No controller selected",
 // //                   maxLines: 1,
 // //                   overflow: TextOverflow.ellipsis,
 // //                   style: TextStyle(
-// //                     color: snapshot.bannerColor,
-// //                     fontSize: compact ? 12.5 : 14,
-// //                     fontWeight: FontWeight.w800,
+// //                     color: AppColors.white.withOpacity(0.45),
+// //                     fontSize: 11,
+// //                     fontWeight: FontWeight.w700,
 // //                   ),
 // //                 ),
 // //               ],
 // //             ),
 // //           ),
-// //           const SizedBox(width: 10),
-// //           Column(
-// //             crossAxisAlignment: CrossAxisAlignment.end,
-// //             children: [
-// //               Text(
-// //                 "Frequency",
-// //                 style: TextStyle(
-// //                   color: AppColors.white.withOpacity(0.62),
-// //                   fontSize: compact ? 11 : 12,
-// //                   fontWeight: FontWeight.w700,
-// //                 ),
-// //               ),
-// //               const SizedBox(height: 5),
-// //               Text(
-// //                 frequencyText,
-// //                 style: TextStyle(
-// //                   color: AppColors.white,
-// //                   fontSize: compact ? 19 : 23,
-// //                   fontWeight: FontWeight.w900,
-// //                 ),
-// //               ),
-// //               const SizedBox(height: 4),
-// //               Text(
-// //                 "Ref $referenceFrequencyText",
-// //                 style: TextStyle(
-// //                   color: AppColors.white.withOpacity(0.50),
-// //                   fontSize: compact ? 10.5 : 12,
-// //                   fontWeight: FontWeight.w700,
-// //                 ),
-// //               ),
-// //             ],
-// //           ),
 // //         ],
 // //       ),
 // //     );
 // //   }
 // // }
 // //
-// // // ─────────────────────────────────────────────
-// // // Badge widgets
-// // // ─────────────────────────────────────────────
+// // class NoDeviceProfessionalNotice extends StatelessWidget {
+// //   final VoidCallback onSelectDevice;
 // //
-// // class DeviceNotConnectedBadge extends StatelessWidget {
-// //   const DeviceNotConnectedBadge({super.key});
-// //
-// //   @override
-// //   Widget build(BuildContext context) {
-// //     return _InfoBadge(
-// //       icon: Icons.link_off_rounded,
-// //       color: AppColors.warning,
-// //       text: "Device not connected. Select a device to view live parameters.",
-// //     );
-// //   }
-// // }
-// //
-// // class WaitingTelemetryBadge extends StatelessWidget {
-// //   const WaitingTelemetryBadge({super.key});
-// //
-// //   @override
-// //   Widget build(BuildContext context) {
-// //     return _InfoBadge(
-// //       icon: Icons.sync_rounded,
-// //       color: AppColors.primary,
-// //       text: "Device selected. Waiting for latest telemetry values.",
-// //     );
-// //   }
-// // }
-// //
-// // class DeviceDisconnectedBadge extends StatelessWidget {
-// //   const DeviceDisconnectedBadge({super.key});
-// //
-// //   @override
-// //   Widget build(BuildContext context) {
-// //     return _InfoBadge(
-// //       icon: Icons.wifi_off_rounded,
-// //       color: AppColors.warning,
-// //       text:
-// //       "Device disconnected. Showing last received values when available.",
-// //     );
-// //   }
-// // }
-// //
-// // class _InfoBadge extends StatelessWidget {
-// //   final IconData icon;
-// //   final Color color;
-// //   final String text;
-// //
-// //   const _InfoBadge({
-// //     required this.icon,
-// //     required this.color,
-// //     required this.text,
-// //   });
-// //
-// //   @override
-// //   Widget build(BuildContext context) {
-// //     return Container(
-// //       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-// //       decoration: BoxDecoration(
-// //         color: color.withOpacity(0.12),
-// //         borderRadius: BorderRadius.circular(14),
-// //         border: Border.all(color: color.withOpacity(0.3)),
-// //       ),
-// //       child: Row(
-// //         children: [
-// //           Icon(icon, color: color, size: 18),
-// //           const SizedBox(width: 8),
-// //           Expanded(
-// //             child: Text(
-// //               text,
-// //               style: TextStyle(
-// //                 color: AppColors.white.withOpacity(0.85),
-// //                 fontWeight: FontWeight.w700,
-// //                 fontSize: 12.5,
-// //               ),
-// //             ),
-// //           ),
-// //         ],
-// //       ),
-// //     );
-// //   }
-// // }
-// //
-// // // ─────────────────────────────────────────────
-// // // StatusPanel & StatusDot
-// // // ─────────────────────────────────────────────
-// //
-// // class StatusPanel extends StatelessWidget {
-// //   final MotorSnapshot snapshot;
-// //   final Animation<double> pulseAnimation;
-// //
-// //   const StatusPanel({
+// //   const NoDeviceProfessionalNotice({
 // //     super.key,
-// //     required this.snapshot,
-// //     required this.pulseAnimation,
+// //     required this.onSelectDevice,
 // //   });
 // //
 // //   @override
 // //   Widget build(BuildContext context) {
-// //     final phaseOk =
-// //         snapshot.connectionStatus == DeviceConnectionStatus.connected;
-// //     final motorOk = snapshot.isRunning;
-// //     final tripOk = !snapshot.hasFault;
-// //     final serviceOk =
-// //         snapshot.connectionStatus == DeviceConnectionStatus.connected;
-// //
 // //     return Container(
-// //       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+// //       padding: const EdgeInsets.all(18),
 // //       decoration: BoxDecoration(
 // //         color: AppColors.cardDark,
 // //         borderRadius: BorderRadius.circular(24),
@@ -2798,167 +2509,37 @@
 // //       ),
 // //       child: Row(
 // //         children: [
+// //           Container(
+// //             height: 46,
+// //             width: 46,
+// //             decoration: BoxDecoration(
+// //               color: AppColors.primary.withOpacity(0.10),
+// //               borderRadius: BorderRadius.circular(16),
+// //             ),
+// //             child: const Icon(
+// //               Icons.devices_other_rounded,
+// //               color: AppColors.primary,
+// //             ),
+// //           ),
+// //           const SizedBox(width: 14),
 // //           Expanded(
-// //             child: StatusDot(
-// //               title: "Phase",
-// //               ok: phaseOk,
-// //               blinking: false,
-// //               pulseAnimation: pulseAnimation,
-// //             ),
-// //           ),
-// //           Expanded(
-// //             child: StatusDot(
-// //               title: "Motor",
-// //               ok: motorOk,
-// //               blinking: false,
-// //               pulseAnimation: pulseAnimation,
-// //             ),
-// //           ),
-// //           Expanded(
-// //             child: StatusDot(
-// //               title: "Trip",
-// //               ok: tripOk,
-// //               blinking: snapshot.hasFault,
-// //               pulseAnimation: pulseAnimation,
-// //             ),
-// //           ),
-// //           Expanded(
-// //             child: StatusDot(
-// //               title: "Service",
-// //               ok: serviceOk,
-// //               blinking: snapshot.connectionStatus ==
-// //                   DeviceConnectionStatus.disconnected,
-// //               pulseAnimation: pulseAnimation,
-// //             ),
-// //           ),
-// //         ],
-// //       ),
-// //     );
-// //   }
-// // }
-// //
-// // class StatusDot extends StatelessWidget {
-// //   final String title;
-// //   final bool ok;
-// //   final bool blinking;
-// //   final Animation<double> pulseAnimation;
-// //
-// //   const StatusDot({
-// //     super.key,
-// //     required this.title,
-// //     required this.ok,
-// //     required this.blinking,
-// //     required this.pulseAnimation,
-// //   });
-// //
-// //   @override
-// //   Widget build(BuildContext context) {
-// //     final width = MediaQuery.of(context).size.width;
-// //     final dotSize = width < 360 ? 40.0 : 48.0;
-// //     final baseColor = ok ? AppColors.green : AppColors.error;
-// //
-// //     return AnimatedBuilder(
-// //       animation: pulseAnimation,
-// //       builder: (context, child) {
-// //         final scale = blinking ? pulseAnimation.value : 1.0;
-// //         final opacity =
-// //         blinking ? (0.55 + (pulseAnimation.value - 0.82)) : 1.0;
-// //
-// //         return Column(
-// //           children: [
-// //             Transform.scale(
-// //               scale: scale,
-// //               child: Opacity(
-// //                 opacity: opacity.clamp(0.45, 1.0),
-// //                 child: Container(
-// //                   height: dotSize,
-// //                   width: dotSize,
-// //                   decoration: BoxDecoration(
-// //                     color: baseColor,
-// //                     shape: BoxShape.circle,
-// //                     boxShadow: [
-// //                       BoxShadow(
-// //                         color: baseColor.withOpacity(0.42),
-// //                         blurRadius: blinking ? 28 : 18,
-// //                         spreadRadius: blinking ? 4 : 2,
-// //                       ),
-// //                     ],
-// //                   ),
-// //                 ),
-// //               ),
-// //             ),
-// //             const SizedBox(height: 8),
-// //             FittedBox(
-// //               child: Text(
-// //                 title,
-// //                 style: TextStyle(
-// //                   color: AppColors.white.withOpacity(0.7),
-// //                   fontSize: width < 360 ? 12 : 14,
-// //                   fontWeight: FontWeight.w700,
-// //                 ),
-// //               ),
-// //             ),
-// //           ],
-// //         );
-// //       },
-// //     );
-// //   }
-// // }
-// //
-// // // ─────────────────────────────────────────────
-// // // SystemBanner
-// // // ─────────────────────────────────────────────
-// //
-// // class SystemBanner extends StatelessWidget {
-// //   final MotorSnapshot snapshot;
-// //
-// //   const SystemBanner({super.key, required this.snapshot});
-// //
-// //   @override
-// //   Widget build(BuildContext context) {
-// //     final width = MediaQuery.of(context).size.width;
-// //
-// //     final text = snapshot.hasFault
-// //         ? "${snapshot.faultName} Fault"
-// //         : snapshot.isRunning
-// //         ? snapshot.runSourceText
-// //         : snapshot.statusName;
-// //
-// //     final foregroundColor = snapshot.bannerColor == AppColors.primary
-// //         ? AppColors.black
-// //         : AppColors.white;
-// //
-// //     return Container(
-// //       width: double.infinity,
-// //       padding: EdgeInsets.symmetric(
-// //         vertical: width < 360 ? 14 : 16,
-// //         horizontal: 18,
-// //       ),
-// //       decoration: BoxDecoration(
-// //         color: snapshot.bannerColor,
-// //         borderRadius: BorderRadius.circular(22),
-// //         boxShadow: [
-// //           BoxShadow(
-// //             color: snapshot.bannerColor.withOpacity(0.22),
-// //             blurRadius: 20,
-// //             offset: const Offset(0, 10),
-// //           ),
-// //         ],
-// //       ),
-// //       child: Row(
-// //         mainAxisAlignment: MainAxisAlignment.center,
-// //         children: [
-// //           Icon(snapshot.bannerIcon,
-// //               color: foregroundColor, size: width < 360 ? 24 : 27),
-// //           const SizedBox(width: 10),
-// //           Flexible(
 // //             child: Text(
-// //               text,
-// //               overflow: TextOverflow.ellipsis,
-// //               textAlign: TextAlign.center,
+// //               "Select a device to enable motor control. Parameters stay empty until a controller is selected.",
 // //               style: TextStyle(
-// //                 color: foregroundColor,
-// //                 fontSize: width < 360 ? 16 : 19,
+// //                 color: AppColors.white.withOpacity(0.68),
+// //                 fontSize: 13.5,
+// //                 height: 1.4,
+// //                 fontWeight: FontWeight.w700,
+// //               ),
+// //             ),
+// //           ),
+// //           const SizedBox(width: 10),
+// //           TextButton(
+// //             onPressed: onSelectDevice,
+// //             child: const Text(
+// //               "Select",
+// //               style: TextStyle(
+// //                 color: AppColors.primary,
 // //                 fontWeight: FontWeight.w900,
 // //               ),
 // //             ),
@@ -2969,54 +2550,49 @@
 // //   }
 // // }
 // //
-// // // ─────────────────────────────────────────────
-// // // FaultAlertCard
-// // // ─────────────────────────────────────────────
+// // class DeviceOfflineNotice extends StatelessWidget {
+// //   final Future<void> Function() onRetry;
 // //
-// // class FaultAlertCard extends StatelessWidget {
-// //   final MotorSnapshot snapshot;
-// //
-// //   const FaultAlertCard({super.key, required this.snapshot});
+// //   const DeviceOfflineNotice({
+// //     super.key,
+// //     required this.onRetry,
+// //   });
 // //
 // //   @override
 // //   Widget build(BuildContext context) {
 // //     return Container(
-// //       width: double.infinity,
-// //       padding: const EdgeInsets.all(17),
+// //       padding: const EdgeInsets.all(14),
 // //       decoration: BoxDecoration(
-// //         color: AppColors.error.withOpacity(0.14),
-// //         borderRadius: BorderRadius.circular(22),
-// //         border: Border.all(color: AppColors.error.withOpacity(0.38)),
+// //         color: AppColors.warning.withOpacity(0.10),
+// //         borderRadius: BorderRadius.circular(18),
+// //         border: Border.all(color: AppColors.warning.withOpacity(0.24)),
 // //       ),
 // //       child: Row(
-// //         crossAxisAlignment: CrossAxisAlignment.start,
 // //         children: [
-// //           const Icon(Icons.warning_amber_rounded,
-// //               color: AppColors.error, size: 30),
-// //           const SizedBox(width: 12),
+// //           const Icon(
+// //             Icons.info_outline_rounded,
+// //             color: AppColors.warning,
+// //             size: 22,
+// //           ),
+// //           const SizedBox(width: 10),
 // //           Expanded(
-// //             child: Column(
-// //               crossAxisAlignment: CrossAxisAlignment.start,
-// //               children: [
-// //                 Text(
-// //                   snapshot.faultName,
-// //                   style: const TextStyle(
-// //                     color: AppColors.error,
-// //                     fontSize: 18,
-// //                     fontWeight: FontWeight.w900,
-// //                   ),
-// //                 ),
-// //                 const SizedBox(height: 5),
-// //                 Text(
-// //                   snapshot.faultDescription,
-// //                   style: TextStyle(
-// //                     color: AppColors.white.withOpacity(0.78),
-// //                     fontSize: 13.5,
-// //                     height: 1.35,
-// //                     fontWeight: FontWeight.w600,
-// //                   ),
-// //                 ),
-// //               ],
+// //             child: Text(
+// //               "Device selected. Waiting for latest live reading.",
+// //               style: TextStyle(
+// //                 color: AppColors.white.withOpacity(0.78),
+// //                 fontSize: 12.8,
+// //                 fontWeight: FontWeight.w700,
+// //               ),
+// //             ),
+// //           ),
+// //           TextButton(
+// //             onPressed: onRetry,
+// //             child: const Text(
+// //               "Retry",
+// //               style: TextStyle(
+// //                 color: AppColors.warning,
+// //                 fontWeight: FontWeight.w900,
+// //               ),
 // //             ),
 // //           ),
 // //         ],
@@ -3025,17 +2601,58 @@
 // //   }
 // // }
 // //
-// // // ─────────────────────────────────────────────
-// // // CustomerNameField
-// // // ─────────────────────────────────────────────
+// // class DeviceOnlineNotice extends StatelessWidget {
+// //   final bool motorRunning;
 // //
-// // class CustomerNameField extends StatelessWidget {
+// //   const DeviceOnlineNotice({
+// //     super.key,
+// //     required this.motorRunning,
+// //   });
+// //
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     final text = motorRunning
+// //         ? "Live telemetry received. Motor is running."
+// //         : "Live telemetry received. Motor is stopped.";
+// //
+// //     return Container(
+// //       padding: const EdgeInsets.all(14),
+// //       decoration: BoxDecoration(
+// //         color: AppColors.green.withOpacity(0.10),
+// //         borderRadius: BorderRadius.circular(18),
+// //         border: Border.all(color: AppColors.green.withOpacity(0.24)),
+// //       ),
+// //       child: Row(
+// //         children: [
+// //           const Icon(
+// //             Icons.check_circle_rounded,
+// //             color: AppColors.green,
+// //             size: 22,
+// //           ),
+// //           const SizedBox(width: 10),
+// //           Expanded(
+// //             child: Text(
+// //               text,
+// //               style: TextStyle(
+// //                 color: AppColors.white.withOpacity(0.78),
+// //                 fontSize: 12.8,
+// //                 fontWeight: FontWeight.w700,
+// //               ),
+// //             ),
+// //           ),
+// //         ],
+// //       ),
+// //     );
+// //   }
+// // }
+// //
+// // class CustomerNameInputCard extends StatelessWidget {
 // //   final TextEditingController controller;
 // //   final FocusNode focusNode;
 // //   final List<String> suggestions;
 // //   final bool enabled;
 // //
-// //   const CustomerNameField({
+// //   const CustomerNameInputCard({
 // //     super.key,
 // //     required this.controller,
 // //     required this.focusNode,
@@ -3045,153 +2662,297 @@
 // //
 // //   @override
 // //   Widget build(BuildContext context) {
-// //     return RawAutocomplete<String>(
-// //       textEditingController: controller,
-// //       focusNode: focusNode,
-// //       optionsBuilder: (TextEditingValue value) {
-// //         if (!enabled) return const Iterable<String>.empty();
-// //
-// //         final input = value.text.trim().toLowerCase();
-// //         if (input.isEmpty) return const Iterable<String>.empty();
-// //
-// //         return suggestions.where((name) => name.toLowerCase().contains(input));
-// //       },
-// //       onSelected: (String value) {
-// //         controller.text = value;
-// //         controller.selection = TextSelection.fromPosition(
-// //           TextPosition(offset: controller.text.length),
-// //         );
-// //       },
-// //       fieldViewBuilder:
-// //           (context, textEditingController, fieldFocusNode, onFieldSubmitted) {
-// //         return Container(
-// //           decoration: BoxDecoration(
-// //             color: AppColors.cardDark,
-// //             borderRadius: BorderRadius.circular(22),
-// //             border: Border.all(color: AppColors.borderDark),
-// //           ),
-// //           child: TextField(
-// //             enabled: enabled,
-// //             controller: textEditingController,
-// //             focusNode: fieldFocusNode,
-// //             keyboardType: TextInputType.text,
-// //             style: const TextStyle(
-// //                 color: AppColors.white, fontWeight: FontWeight.w700),
-// //             textInputAction: TextInputAction.done,
-// //             decoration: InputDecoration(
-// //               hintText:
-// //               enabled ? "Customer name for Khata" : "Select a device first",
-// //               hintStyle:
-// //               TextStyle(color: AppColors.white.withOpacity(0.42)),
-// //               prefixIcon: Icon(
-// //                 enabled
-// //                     ? Icons.person_outline_rounded
-// //                     : Icons.lock_outline_rounded,
-// //                 color: AppColors.primary,
+// //     return Column(
+// //       crossAxisAlignment: CrossAxisAlignment.start,
+// //       children: [
+// //         Padding(
+// //           padding: const EdgeInsets.only(left: 4, bottom: 9),
+// //           child: Row(
+// //             children: [
+// //               Icon(
+// //                 Icons.account_circle_outlined,
+// //                 size: 17,
+// //                 color: AppColors.white.withOpacity(0.48),
 // //               ),
-// //               suffixIcon: suggestions.isEmpty || !enabled
-// //                   ? null
-// //                   : Icon(Icons.manage_search_rounded,
-// //                   color: AppColors.white.withOpacity(0.45)),
-// //               border: InputBorder.none,
-// //               contentPadding:
-// //               const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-// //             ),
+// //               const SizedBox(width: 7),
+// //               Text(
+// //                 "CUSTOMER / KHATA",
+// //                 style: TextStyle(
+// //                   color: AppColors.white.withOpacity(0.56),
+// //                   fontSize: 11,
+// //                   letterSpacing: 1.1,
+// //                   fontWeight: FontWeight.w900,
+// //                 ),
+// //               ),
+// //             ],
 // //           ),
-// //         );
-// //       },
-// //       optionsViewBuilder: (context, onSelected, options) {
-// //         return Align(
-// //           alignment: Alignment.topLeft,
-// //           child: Material(
-// //             color: Colors.transparent,
-// //             child: Container(
-// //               width: MediaQuery.of(context).size.width - 36,
-// //               constraints:
-// //               const BoxConstraints(maxHeight: 240, maxWidth: 560),
-// //               margin: const EdgeInsets.only(top: 8),
+// //         ),
+// //         RawAutocomplete<String>(
+// //           textEditingController: controller,
+// //           focusNode: focusNode,
+// //           optionsBuilder: (TextEditingValue value) {
+// //             if (!enabled) return const Iterable<String>.empty();
+// //
+// //             final input = value.text.trim().toLowerCase();
+// //
+// //             if (input.isEmpty) {
+// //               return suggestions.take(8);
+// //             }
+// //
+// //             final startsWith = <String>[];
+// //             final contains = <String>[];
+// //
+// //             for (final name in suggestions) {
+// //               final lower = name.toLowerCase();
+// //               if (lower.startsWith(input)) {
+// //                 startsWith.add(name);
+// //               } else if (lower.contains(input)) {
+// //                 contains.add(name);
+// //               }
+// //             }
+// //
+// //             return [...startsWith, ...contains].take(8);
+// //           },
+// //           onSelected: (String value) {
+// //             controller.text = value;
+// //             controller.selection = TextSelection.collapsed(
+// //               offset: controller.text.length,
+// //             );
+// //           },
+// //           fieldViewBuilder: (
+// //               context,
+// //               textEditingController,
+// //               fieldFocusNode,
+// //               onFieldSubmitted,
+// //               ) {
+// //             return AnimatedContainer(
+// //               duration: const Duration(milliseconds: 180),
 // //               decoration: BoxDecoration(
 // //                 color: AppColors.cardDark,
-// //                 borderRadius: BorderRadius.circular(18),
-// //                 border: Border.all(color: AppColors.borderDark),
+// //                 borderRadius: BorderRadius.circular(20),
+// //                 border: Border.all(
+// //                   color: fieldFocusNode.hasFocus
+// //                       ? AppColors.primary.withOpacity(0.70)
+// //                       : AppColors.borderDark,
+// //                 ),
 // //                 boxShadow: [
 // //                   BoxShadow(
-// //                     color: Colors.black.withOpacity(0.34),
-// //                     blurRadius: 22,
-// //                     offset: const Offset(0, 12),
+// //                     color: Colors.black.withOpacity(0.16),
+// //                     blurRadius: 16,
+// //                     offset: const Offset(0, 8),
 // //                   ),
 // //                 ],
 // //               ),
-// //               child: ListView.separated(
-// //                 padding: const EdgeInsets.symmetric(vertical: 6),
-// //                 shrinkWrap: true,
-// //                 itemCount: options.length,
-// //                 separatorBuilder: (_, __) {
-// //                   return Divider(
-// //                       height: 1, color: AppColors.white.withOpacity(0.06));
-// //                 },
-// //                 itemBuilder: (context, index) {
-// //                   final option = options.elementAt(index);
-// //                   return ListTile(
-// //                     dense: true,
-// //                     leading:
-// //                     const Icon(Icons.person_rounded, color: AppColors.primary),
-// //                     title: Text(
-// //                       option,
-// //                       style: const TextStyle(
-// //                           color: AppColors.white, fontWeight: FontWeight.w800),
+// //               child: TextField(
+// //                 enabled: enabled,
+// //                 controller: textEditingController,
+// //                 focusNode: fieldFocusNode,
+// //                 keyboardType: TextInputType.name,
+// //                 textCapitalization: TextCapitalization.words,
+// //                 autocorrect: false,
+// //                 style: const TextStyle(
+// //                   color: AppColors.white,
+// //                   fontSize: 15.5,
+// //                   fontWeight: FontWeight.w800,
+// //                 ),
+// //                 textInputAction: TextInputAction.done,
+// //                 decoration: InputDecoration(
+// //                   hintText: enabled
+// //                       ? "Enter new or previous customer"
+// //                       : "Device must be online first",
+// //                   hintStyle: TextStyle(
+// //                     color: AppColors.white.withOpacity(0.38),
+// //                     fontWeight: FontWeight.w600,
+// //                   ),
+// //                   prefixIcon: Icon(
+// //                     enabled
+// //                         ? Icons.person_search_rounded
+// //                         : Icons.lock_outline_rounded,
+// //                     color: AppColors.primary,
+// //                   ),
+// //                   suffixIcon: enabled && suggestions.isNotEmpty
+// //                       ? Tooltip(
+// //                     message: "Previous customers available",
+// //                     child: Icon(
+// //                       Icons.history_rounded,
+// //                       color: AppColors.white.withOpacity(0.38),
 // //                     ),
-// //                     onTap: () => onSelected(option),
-// //                   );
-// //                 },
+// //                   )
+// //                       : null,
+// //                   border: InputBorder.none,
+// //                   contentPadding: const EdgeInsets.symmetric(
+// //                     horizontal: 18,
+// //                     vertical: 18,
+// //                   ),
+// //                 ),
+// //               ),
+// //             );
+// //           },
+// //           optionsViewBuilder: (context, onSelected, options) {
+// //             final optionList = options.toList();
+// //
+// //             return Align(
+// //               alignment: Alignment.topLeft,
+// //               child: Material(
+// //                 color: Colors.transparent,
+// //                 child: Container(
+// //                   width: MediaQuery.of(context).size.width - 36,
+// //                   constraints: const BoxConstraints(
+// //                     maxHeight: 290,
+// //                     maxWidth: 560,
+// //                   ),
+// //                   margin: const EdgeInsets.only(top: 8),
+// //                   decoration: BoxDecoration(
+// //                     color: AppColors.cardDark,
+// //                     borderRadius: BorderRadius.circular(18),
+// //                     border: Border.all(color: AppColors.borderDark),
+// //                     boxShadow: [
+// //                       BoxShadow(
+// //                         color: Colors.black.withOpacity(0.28),
+// //                         blurRadius: 24,
+// //                         offset: const Offset(0, 12),
+// //                       ),
+// //                     ],
+// //                   ),
+// //                   child: Column(
+// //                     mainAxisSize: MainAxisSize.min,
+// //                     crossAxisAlignment: CrossAxisAlignment.start,
+// //                     children: [
+// //                       Padding(
+// //                         padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+// //                         child: Row(
+// //                           children: [
+// //                             const Icon(
+// //                               Icons.history_rounded,
+// //                               color: AppColors.primary,
+// //                               size: 18,
+// //                             ),
+// //                             const SizedBox(width: 8),
+// //                             Text(
+// //                               "Previous customers",
+// //                               style: TextStyle(
+// //                                 color: AppColors.white.withOpacity(0.62),
+// //                                 fontSize: 12,
+// //                                 fontWeight: FontWeight.w900,
+// //                               ),
+// //                             ),
+// //                           ],
+// //                         ),
+// //                       ),
+// //                       Flexible(
+// //                         child: ListView.separated(
+// //                           padding: const EdgeInsets.only(bottom: 7),
+// //                           shrinkWrap: true,
+// //                           itemCount: optionList.length,
+// //                           separatorBuilder: (_, __) => Divider(
+// //                             height: 1,
+// //                             color: AppColors.white.withOpacity(0.06),
+// //                           ),
+// //                           itemBuilder: (context, index) {
+// //                             final option = optionList[index];
+// //
+// //                             return ListTile(
+// //                               dense: true,
+// //                               leading: Container(
+// //                                 height: 34,
+// //                                 width: 34,
+// //                                 alignment: Alignment.center,
+// //                                 decoration: BoxDecoration(
+// //                                   color: AppColors.primary.withOpacity(0.10),
+// //                                   shape: BoxShape.circle,
+// //                                 ),
+// //                                 child: const Icon(
+// //                                   Icons.person_rounded,
+// //                                   color: AppColors.primary,
+// //                                   size: 18,
+// //                                 ),
+// //                               ),
+// //                               title: Text(
+// //                                 option,
+// //                                 style: const TextStyle(
+// //                                   color: AppColors.white,
+// //                                   fontWeight: FontWeight.w800,
+// //                                 ),
+// //                               ),
+// //                               trailing: Icon(
+// //                                 Icons.north_west_rounded,
+// //                                 size: 17,
+// //                                 color: AppColors.white.withOpacity(0.30),
+// //                               ),
+// //                               onTap: () => onSelected(option),
+// //                             );
+// //                           },
+// //                         ),
+// //                       ),
+// //                     ],
+// //                   ),
+// //                 ),
+// //               ),
+// //             );
+// //           },
+// //         ),
+// //         if (enabled)
+// //           Padding(
+// //             padding: const EdgeInsets.only(left: 5, top: 8),
+// //             child: Text(
+// //               suggestions.isEmpty
+// //                   ? "New customer names will appear here next time."
+// //                   : "Type to search, or select a previously used customer.",
+// //               style: TextStyle(
+// //                 color: AppColors.white.withOpacity(0.38),
+// //                 fontSize: 11.5,
+// //                 fontWeight: FontWeight.w600,
 // //               ),
 // //             ),
 // //           ),
-// //         );
-// //       },
+// //       ],
 // //     );
 // //   }
 // // }
 // //
-// // // ─────────────────────────────────────────────
-// // // MotorButton
-// // // ─────────────────────────────────────────────
-// //
-// // class MotorButton extends StatelessWidget {
-// //   final MotorSnapshot snapshot;
+// // class MotorCommandButton extends StatelessWidget {
+// //   final bool hasDevice;
+// //   final bool deviceOnline;
+// //   final bool isOn;
 // //   final bool loading;
 // //   final double size;
 // //
-// //   const MotorButton({
+// //   const MotorCommandButton({
 // //     super.key,
-// //     required this.snapshot,
+// //     required this.hasDevice,
+// //     required this.deviceOnline,
+// //     required this.isOn,
 // //     required this.loading,
 // //     required this.size,
 // //   });
 // //
 // //   @override
 // //   Widget build(BuildContext context) {
-// //     final activeColor =
-// //     snapshot.connectionStatus == DeviceConnectionStatus.noDevice
+// //     final activeColor = !hasDevice
+// //         ? AppColors.primary
+// //         : !deviceOnline
 // //         ? AppColors.warning
-// //         : snapshot.connectionStatus == DeviceConnectionStatus.disconnected
-// //         ? AppColors.warning
-// //         : snapshot.hasFault
-// //         ? AppColors.error
-// //         : snapshot.isRunning
+// //         : isOn
 // //         ? AppColors.green
 // //         : AppColors.error;
 // //
-// //     final label =
-// //     snapshot.connectionStatus == DeviceConnectionStatus.noDevice
-// //         ? "N/A"
-// //         : snapshot.connectionStatus == DeviceConnectionStatus.disconnected
-// //         ? "OFFLINE"
-// //         : snapshot.hasFault
-// //         ? "FAULT"
-// //         : snapshot.isRunning
+// //     final label = !hasDevice
+// //         ? "SELECT"
+// //         : !deviceOnline
+// //         ? "WAIT"
+// //         : isOn
 // //         ? "ON"
 // //         : "OFF";
+// //
+// //     final icon = !hasDevice
+// //         ? Icons.devices_other_rounded
+// //         : !deviceOnline
+// //         ? Icons.wifi_tethering_error_rounded
+// //         : isOn
+// //         ? Icons.power_settings_new_rounded
+// //         : Icons.power_off_rounded;
+// //
+// //     final textColor = !hasDevice ? AppColors.black : AppColors.white;
 // //
 // //     return AnimatedContainer(
 // //       duration: const Duration(milliseconds: 300),
@@ -3203,11 +2964,14 @@
 // //         gradient: LinearGradient(
 // //           begin: Alignment.topLeft,
 // //           end: Alignment.bottomRight,
-// //           colors: [activeColor, activeColor.withOpacity(0.72)],
+// //           colors: [
+// //             activeColor,
+// //             activeColor.withOpacity(0.72),
+// //           ],
 // //         ),
 // //         boxShadow: [
 // //           BoxShadow(
-// //             color: activeColor.withOpacity(0.34),
+// //             color: activeColor.withOpacity(0.30),
 // //             blurRadius: 34,
 // //             offset: const Offset(0, 16),
 // //           ),
@@ -3218,16 +2982,24 @@
 // //           : Column(
 // //         mainAxisAlignment: MainAxisAlignment.center,
 // //         children: [
-// //           Icon(snapshot.bannerIcon,
-// //               color: AppColors.white, size: size < 190 ? 36 : 42),
+// //           Icon(
+// //             icon,
+// //             color: textColor,
+// //             size: size < 190 ? 36 : 42,
+// //           ),
 // //           const SizedBox(height: 8),
 // //           FittedBox(
 // //             child: Text(
 // //               label,
 // //               style: TextStyle(
-// //                 color: AppColors.white,
-// //                 fontSize:
-// //                 label == "OFFLINE" ? 22 : size < 190 ? 26 : 36,
+// //                 color: textColor,
+// //                 fontSize: label == "SELECT"
+// //                     ? 24
+// //                     : label == "WAIT"
+// //                     ? 24
+// //                     : size < 190
+// //                     ? 26
+// //                     : 36,
 // //                 fontWeight: FontWeight.w900,
 // //               ),
 // //             ),
@@ -3238,22 +3010,178 @@
 // //   }
 // // }
 // //
-// // // ─────────────────────────────────────────────
-// // // MetricCard
-// // // ─────────────────────────────────────────────
+// // class MotorRunStatusCard extends StatelessWidget {
+// //   final bool hasDevice;
+// //   final bool deviceOnline;
+// //   final bool isOn;
+// //   final bool waitingForVfd;
+// //   final String runningTime;
 // //
-// // class MetricCard extends StatelessWidget {
+// //   const MotorRunStatusCard({
+// //     super.key,
+// //     required this.hasDevice,
+// //     required this.deviceOnline,
+// //     required this.isOn,
+// //     required this.waitingForVfd,
+// //     required this.runningTime,
+// //   });
+// //
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     final active = hasDevice && deviceOnline && isOn;
+// //
+// //     final title = !hasDevice
+// //         ? "NO DEVICE"
+// //         : !deviceOnline
+// //         ? "WAITING FOR DEVICE"
+// //         : waitingForVfd
+// //         ? "SYNCING WITH VFD"
+// //         : active
+// //         ? "MOTOR RUN TIME"
+// //         : "MOTOR STOPPED";
+// //
+// //     final subtitle = !hasDevice
+// //         ? "Select a controller to start monitoring"
+// //         : !deviceOnline
+// //         ? "Waiting for fresh live telemetry"
+// //         : waitingForVfd
+// //         ? "Waiting for the VFD to confirm the command"
+// //         : active
+// //         ? "Elapsed time since this motor run started"
+// //         : "Timer starts only after VFD confirms ON";
+// //
+// //     final accent = active ? AppColors.green : AppColors.primary;
+// //
+// //     return Container(
+// //       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+// //       decoration: BoxDecoration(
+// //         color: AppColors.cardDark,
+// //         borderRadius: BorderRadius.circular(20),
+// //         border: Border.all(
+// //           color: active
+// //               ? AppColors.green.withOpacity(0.28)
+// //               : AppColors.borderDark,
+// //         ),
+// //       ),
+// //       child: Row(
+// //         children: [
+// //           Container(
+// //             height: 44,
+// //             width: 44,
+// //             alignment: Alignment.center,
+// //             decoration: BoxDecoration(
+// //               color: accent.withOpacity(0.11),
+// //               borderRadius: BorderRadius.circular(14),
+// //             ),
+// //             child: waitingForVfd
+// //                 ? SizedBox(
+// //               height: 21,
+// //               width: 21,
+// //               child: CircularProgressIndicator(
+// //                 strokeWidth: 2.4,
+// //                 color: accent,
+// //               ),
+// //             )
+// //                 : Icon(
+// //               active ? Icons.timer_rounded : Icons.timer_off_outlined,
+// //               color: accent,
+// //               size: 23,
+// //             ),
+// //           ),
+// //           const SizedBox(width: 13),
+// //           Expanded(
+// //             child: Column(
+// //               crossAxisAlignment: CrossAxisAlignment.start,
+// //               children: [
+// //                 Text(
+// //                   title,
+// //                   style: TextStyle(
+// //                     color: AppColors.white.withOpacity(0.54),
+// //                     fontSize: 10.5,
+// //                     letterSpacing: 0.9,
+// //                     fontWeight: FontWeight.w900,
+// //                   ),
+// //                 ),
+// //                 const SizedBox(height: 4),
+// //                 Text(
+// //                   subtitle,
+// //                   maxLines: 2,
+// //                   overflow: TextOverflow.ellipsis,
+// //                   style: TextStyle(
+// //                     color: AppColors.white.withOpacity(0.60),
+// //                     fontSize: 11.8,
+// //                     fontWeight: FontWeight.w600,
+// //                   ),
+// //                 ),
+// //               ],
+// //             ),
+// //           ),
+// //           const SizedBox(width: 12),
+// //           Text(
+// //             active ? runningTime : "00:00:00",
+// //             style: TextStyle(
+// //               color: active
+// //                   ? AppColors.green
+// //                   : AppColors.white.withOpacity(0.42),
+// //               fontSize: 20,
+// //               fontWeight: FontWeight.w900,
+// //               fontFeatures: const [FontFeature.tabularFigures()],
+// //             ),
+// //           ),
+// //         ],
+// //       ),
+// //     );
+// //   }
+// // }
+// //
+// // class ParameterMetric {
 // //   final IconData icon;
 // //   final String title;
 // //   final String value;
 // //   final bool highlight;
 // //
-// //   const MetricCard({
-// //     super.key,
+// //   const ParameterMetric({
 // //     required this.icon,
 // //     required this.title,
 // //     required this.value,
 // //     this.highlight = false,
+// //   });
+// // }
+// //
+// // class ParameterGridSection extends StatelessWidget {
+// //   final int crossAxisCount;
+// //   final double childAspectRatio;
+// //   final List<ParameterMetric> metrics;
+// //
+// //   const ParameterGridSection({
+// //     super.key,
+// //     required this.crossAxisCount,
+// //     required this.childAspectRatio,
+// //     required this.metrics,
+// //   });
+// //
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     return GridView.count(
+// //       shrinkWrap: true,
+// //       physics: const NeverScrollableScrollPhysics(),
+// //       crossAxisCount: crossAxisCount,
+// //       crossAxisSpacing: 14,
+// //       mainAxisSpacing: 14,
+// //       childAspectRatio: childAspectRatio,
+// //       children: metrics.map((metric) {
+// //         return ParameterMetricCard(metric: metric);
+// //       }).toList(),
+// //     );
+// //   }
+// // }
+// //
+// // class ParameterMetricCard extends StatelessWidget {
+// //   final ParameterMetric metric;
+// //
+// //   const ParameterMetricCard({
+// //     super.key,
+// //     required this.metric,
 // //   });
 // //
 // //   @override
@@ -3267,13 +3195,13 @@
 // //         color: AppColors.cardDark,
 // //         borderRadius: BorderRadius.circular(22),
 // //         border: Border.all(
-// //           color: highlight
+// //           color: metric.highlight
 // //               ? AppColors.primary.withOpacity(0.38)
 // //               : AppColors.borderDark,
 // //         ),
 // //         boxShadow: [
 // //           BoxShadow(
-// //             color: AppColors.shadowDark.withOpacity(0.26),
+// //             color: Colors.black.withOpacity(0.20),
 // //             blurRadius: 18,
 // //             offset: const Offset(0, 9),
 // //           ),
@@ -3283,14 +3211,15 @@
 // //         crossAxisAlignment: CrossAxisAlignment.start,
 // //         children: [
 // //           Icon(
-// //             icon,
-// //             color:
-// //             highlight ? AppColors.primary : AppColors.iconInactiveDark,
+// //             metric.icon,
+// //             color: metric.highlight
+// //                 ? AppColors.primary
+// //                 : AppColors.white.withOpacity(0.45),
 // //             size: compact ? 24 : 28,
 // //           ),
 // //           const Spacer(),
 // //           Text(
-// //             title,
+// //             metric.title,
 // //             maxLines: 1,
 // //             overflow: TextOverflow.ellipsis,
 // //             style: TextStyle(
@@ -3304,7 +3233,7 @@
 // //             alignment: Alignment.centerLeft,
 // //             fit: BoxFit.scaleDown,
 // //             child: Text(
-// //               value,
+// //               metric.value,
 // //               style: TextStyle(
 // //                 color: AppColors.white,
 // //                 height: 1.25,
@@ -3318,154 +3247,21 @@
 // //     );
 // //   }
 // // }
-// //
-// // // ─────────────────────────────────────────────
-// // // DeviceSessionCard  ← updated to show deviceName + deviceId
-// // // ─────────────────────────────────────────────
-// //
-// // class DeviceSessionCard extends StatelessWidget {
-// //   final String? deviceName; // ✅ Human-readable name (e.g. "My Farm Pump")
-// //   final String? deviceId;   // ✅ Raw UUID shown as secondary info
-// //   final MotorSnapshot snapshot;
-// //   final int? timestamp;
-// //
-// //   const DeviceSessionCard({
-// //     super.key,
-// //     required this.deviceName,
-// //     required this.deviceId,
-// //     required this.snapshot,
-// //     required this.timestamp,
-// //   });
-// //
-// //   /// Shows first 8 chars of UUID in uppercase for compact display
-// //   String shortId(String? id) {
-// //     if (id == null || id.length < 8) return "-";
-// //     return id.substring(0, 8).toUpperCase();
-// //   }
-// //
-// //   @override
-// //   Widget build(BuildContext context) {
-// //     final liveText = snapshot.statusName;
-// //     final liveColor = snapshot.bannerColor;
-// //
-// //     // ✅ Prefer deviceName; fall back to deviceId; show "Not Connected" if neither
-// //     final displayName = (deviceName != null && deviceName!.trim().isNotEmpty)
-// //         ? deviceName!
-// //         : snapshot.hasDevice
-// //         ? "SmartWell VFD"
-// //         : "Not Connected";
-// //
-// //     return Container(
-// //       width: double.infinity,
-// //       padding: const EdgeInsets.all(18),
-// //       decoration: BoxDecoration(
-// //         color: AppColors.cardDark,
-// //         borderRadius: BorderRadius.circular(22),
-// //         border: Border.all(color: AppColors.borderDark),
-// //       ),
-// //       child: Column(
-// //         crossAxisAlignment: CrossAxisAlignment.start,
-// //         children: [
-// //           const Text(
-// //             "Device Session",
-// //             style: TextStyle(
-// //               color: AppColors.white,
-// //               fontSize: 18,
-// //               fontWeight: FontWeight.w900,
-// //             ),
-// //           ),
-// //           const SizedBox(height: 12),
-// //           Row(
-// //             children: [
-// //               Container(
-// //                 height: 10,
-// //                 width: 10,
-// //                 decoration: BoxDecoration(
-// //                   color: liveColor,
-// //                   shape: BoxShape.circle,
-// //                 ),
-// //               ),
-// //               const SizedBox(width: 8),
-// //               Expanded(
-// //                 child: Text(
-// //                   liveText,
-// //                   maxLines: 1,
-// //                   overflow: TextOverflow.ellipsis,
-// //                   style: TextStyle(
-// //                     color: liveColor,
-// //                     fontWeight: FontWeight.w900,
-// //                   ),
-// //                 ),
-// //               ),
-// //               Text(
-// //                 "Code ${snapshot.statusCode ?? "-"}",
-// //                 style: TextStyle(
-// //                   color: AppColors.white.withOpacity(0.56),
-// //                   fontWeight: FontWeight.w700,
-// //                 ),
-// //               ),
-// //             ],
-// //           ),
-// //           const SizedBox(height: 14),
-// //           // ✅ Shows human-readable Device Name
-// //           Text(
-// //             "Device Name: $deviceId",
-// //             style: TextStyle(
-// //               color: AppColors.white.withOpacity(0.82),
-// //               fontWeight: FontWeight.w700,
-// //               fontSize: 14,
-// //             ),
-// //           ),
-// //           const SizedBox(height: 6),
-// //           // ✅ Shows shortened Device ID as secondary reference
-// //
-// //           const SizedBox(height: 6),
-// //           const SizedBox(height: 6),
-// //           Text(
-// //             "Timestamp: ${_formatTimestamp(timestamp)}",
-// //             style: TextStyle(
-// //               color: AppColors.white.withOpacity(0.62),
-// //               fontWeight: FontWeight.w600,
-// //             ),
-// //           ),
-// //
-// //         ],
-// //       ),
-// //     );
-// //   }
-// //
-// //   String _formatTimestamp(int? timestamp) {
-// //     if (timestamp == null) return "-";
-// //
-// //     final dateTime =
-// //     DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toLocal();
-// //
-// //     // Always show exact time (professional IoT style)
-// //     return DateFormat("dd MMM yyyy, HH:mm:ss").format(dateTime);
-// //   }
-// // }
-//
 // import "dart:async";
+// import "dart:ui" show FontFeature;
 //
 // import "package:flutter/material.dart";
 // import "package:flutter/services.dart";
 // import "package:flutter_riverpod/flutter_riverpod.dart";
-// import "package:intl/intl.dart";
 //
 // import "package:smart_iot_app/src/core/constant/app_color.dart";
+// import "package:smart_iot_app/src/features/khata/data/models/khata_entry_model.dart";
 // import "package:smart_iot_app/src/features/widget/custom_drawer.dart";
 //
 // import "../../../../app/routes.dart";
 // import "../../../khata/presentation/providers/ khata_providers.dart";
 // import "../../../motor/presentation/ providers/motor_providers.dart";
 // import "../../../telemetry/presentation/providers/telemetry_providers.dart";
-//
-// enum DeviceConnectionStatus {
-//   noDevice,
-//   waitingTelemetry,
-//   connected,
-//   disconnected,
-// }
 //
 // class HomeScreen extends ConsumerStatefulWidget {
 //   final String? deviceId;
@@ -3480,18 +3276,20 @@
 // }
 //
 // class _HomeScreenState extends ConsumerState<HomeScreen>
-//     with SingleTickerProviderStateMixin {
+//     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
 //   late AnimationController pulseController;
 //   late Animation<double> pulseAnimation;
 //
 //   final TextEditingController customerNameController = TextEditingController();
 //   final FocusNode customerNameFocusNode = FocusNode();
 //
-//   Timer? runTimer;
+//   KhataEntryModel? activeKhataEntry;
+//
 //   Timer? telemetryTimer;
+//   Timer? runTimer;
 //
 //   int runSeconds = 0;
-//   int telemetryFailures = 0;
+//   DateTime? motorStartedAt;
 //
 //   String? userId;
 //   String? deviceId;
@@ -3499,13 +3297,27 @@
 //
 //   bool didSetupDevice = false;
 //   bool isTelemetryLoading = false;
-//   bool noDeviceSnackShown = false;
+//   bool firstTelemetryLoaded = false;
+//
+//   // Prevents the UI from starting a brand-new timer before we have checked
+//   // whether an existing open Khata session already has the real start time.
+//   bool didRestoreMotorSession = false;
+//   bool isRestoringMotorSession = false;
+//
+//   // Keeps the motor button in loading state until VFD telemetry confirms
+//   // the requested ON/OFF state.
+//   bool isWaitingForVfdConfirmation = false;
+//
+//   // While a command is pending, keep showing the last confirmed state.
+//   // This prevents ON -> OFF -> ON / OFF -> ON -> OFF visual flicker.
+//   bool? motorStateBeforePendingCommand;
 //
 //   bool get hasDevice => deviceId != null && deviceId!.trim().isNotEmpty;
 //
 //   @override
 //   void initState() {
 //     super.initState();
+//     WidgetsBinding.instance.addObserver(this);
 //
 //     pulseController = AnimationController(
 //       vsync: this,
@@ -3515,6 +3327,21 @@
 //     pulseAnimation = Tween<double>(begin: 0.82, end: 1.12).animate(
 //       CurvedAnimation(parent: pulseController, curve: Curves.easeInOut),
 //     );
+//   }
+//
+//   @override
+//   void didChangeAppLifecycleState(AppLifecycleState state) {
+//     if (state == AppLifecycleState.resumed) {
+//       _refreshRunSeconds();
+//
+//       if (hasDevice) {
+//         Future.microtask(() async {
+//           await loadTelemetry(showError: false);
+//           await ref.read(khataViewModelProvider.notifier).loadEntries();
+//           await _restoreMotorSessionFromKhata();
+//         });
+//       }
+//     }
 //   }
 //
 //   @override
@@ -3529,26 +3356,28 @@
 //     if (args is Map) {
 //       userId = args["userId"]?.toString();
 //
-//       final rawDeviceId = args["deviceId"]?.toString();
-//       deviceId = rawDeviceId == null || rawDeviceId.trim().isEmpty
-//           ? null
-//           : rawDeviceId.trim();
+//       final rawDeviceId = args["deviceId"]?.toString().trim();
+//       if (rawDeviceId != null && rawDeviceId.isNotEmpty) {
+//         deviceId = rawDeviceId;
+//       }
 //
-//       final rawDeviceName = args["deviceName"]?.toString();
-//       deviceName = rawDeviceName == null || rawDeviceName.trim().isEmpty
-//           ? null
-//           : rawDeviceName.trim();
+//       final rawDeviceName = args["deviceName"]?.toString().trim();
+//       if (rawDeviceName != null && rawDeviceName.isNotEmpty) {
+//         deviceName = rawDeviceName;
+//       }
 //     }
 //
 //     final widgetDeviceId = widget.deviceId?.trim();
-//     deviceId ??= widgetDeviceId == null || widgetDeviceId.isEmpty
-//         ? null
-//         : widgetDeviceId;
+//
+//     if (!hasDevice && widgetDeviceId != null && widgetDeviceId.isNotEmpty) {
+//       deviceId = widgetDeviceId;
+//     }
 //
 //     if (hasDevice) {
 //       Future.microtask(() async {
 //         await loadTelemetry();
 //         await ref.read(khataViewModelProvider.notifier).loadEntries();
+//         await _restoreMotorSessionFromKhata();
 //       });
 //
 //       telemetryTimer?.cancel();
@@ -3556,37 +3385,267 @@
 //         const Duration(seconds: 5),
 //             (_) => loadTelemetry(showError: false),
 //       );
-//     } else {
-//       Future.microtask(() {
-//         if (!mounted || noDeviceSnackShown) return;
-//         noDeviceSnackShown = true;
-//         showMessage("Device not connected. Opened dashboard safely.", false);
-//       });
 //     }
 //   }
 //
 //   @override
 //   void dispose() {
+//     WidgetsBinding.instance.removeObserver(this);
 //     pulseController.dispose();
 //     customerNameController.dispose();
 //     customerNameFocusNode.dispose();
-//     runTimer?.cancel();
 //     telemetryTimer?.cancel();
+//     runTimer?.cancel();
 //     super.dispose();
 //   }
 //
-//   DeviceConnectionStatus connectionStatus(dynamic latest) {
-//     if (!hasDevice) return DeviceConnectionStatus.noDevice;
+//   int _toInt(dynamic value) {
+//     if (value == null) return 0;
+//     if (value is int) return value;
+//     if (value is double) return value.toInt();
+//     if (value is num) return value.toInt();
+//     return int.tryParse(value.toString()) ?? 0;
+//   }
 //
-//     if (latest != null && telemetryFailures < 3) {
-//       return DeviceConnectionStatus.connected;
+//   bool isDeviceOnline(dynamic latest) {
+//     if (!hasDevice) return false;
+//     if (latest == null) return false;
+//
+//     final live = _toInt(latest.isLive) == 1;
+//     final fresh = latest.isFresh(withinSeconds: 20);
+//
+//     return live && fresh;
+//   }
+//
+//
+//   bool isMotorRunning(dynamic latest) {
+//     if (!hasDevice) return false;
+//     if (!isDeviceOnline(latest)) return false;
+//
+//     final statusCode = _toInt(latest.statusCode);
+//
+//     return statusCode == 1 || statusCode == 2;
+//   }
+//
+//   Future<void> loadTelemetry({bool showError = false}) async {
+//     if (!hasDevice) return;
+//     if (isTelemetryLoading) return;
+//
+//     final isFirstLoad = !firstTelemetryLoaded;
+//
+//     isTelemetryLoading = true;
+//
+//     try {
+//       await ref.read(telemetryViewModelProvider.notifier).loadLatest(
+//         deviceId!,
+//         showLoading: isFirstLoad,
+//       );
+//     } catch (e) {
+//       if (showError) {
+//         showMessage(
+//           "Telemetry failed: ${friendlyError(e.toString())}",
+//           true,
+//           seconds: 8,
+//         );
+//       }
+//     } finally {
+//       isTelemetryLoading = false;
+//
+//       if (mounted && isFirstLoad) {
+//         setState(() {
+//           firstTelemetryLoaded = true;
+//         });
+//       }
+//     }
+//   }
+//
+//   Future<bool> _waitForVfdConfirmation({
+//     required bool expectedOn,
+//     required int telemetryTimestampBeforeCommand,
+//   }) async {
+//     final deadline = DateTime.now().add(const Duration(seconds: 30));
+//
+//     int consecutiveMatches = 0;
+//     int lastCheckedTimestamp = telemetryTimestampBeforeCommand;
+//
+//     while (mounted && DateTime.now().isBefore(deadline)) {
+//       await loadTelemetry(showError: false);
+//
+//       if (!mounted) return false;
+//
+//       final latest = ref.read(telemetryViewModelProvider).latest;
+//
+//       if (!isDeviceOnline(latest)) {
+//         await Future.delayed(const Duration(seconds: 1));
+//         continue;
+//       }
+//
+//       final telemetryTimestamp = _toInt(latest?.timestamp);
+//
+//       // Do not confirm from the telemetry record that existed before
+//       // the command, and do not count the same telemetry record twice.
+//       if (telemetryTimestamp <= telemetryTimestampBeforeCommand ||
+//           telemetryTimestamp <= lastCheckedTimestamp) {
+//         await Future.delayed(const Duration(seconds: 1));
+//         continue;
+//       }
+//
+//       lastCheckedTimestamp = telemetryTimestamp;
+//
+//       final confirmedMotorState = isMotorRunning(latest);
+//
+//       if (confirmedMotorState == expectedOn) {
+//         consecutiveMatches++;
+//
+//         // Two NEW consecutive VFD readings must agree before the UI
+//         // leaves the circular progress state. This removes transient
+//         // ON/OFF/ON or OFF/ON/OFF flicker.
+//         if (consecutiveMatches >= 2) {
+//           return true;
+//         }
+//       } else {
+//         consecutiveMatches = 0;
+//       }
+//
+//       await Future.delayed(const Duration(seconds: 1));
 //     }
 //
-//     if (telemetryFailures >= 3) {
-//       return DeviceConnectionStatus.disconnected;
+//     return false;
+//   }
+//
+//   KhataEntryModel? _latestOpenKhataForCurrentDevice() {
+//     if (!hasDevice) return null;
+//
+//     final entries = ref.read(khataViewModelProvider).entries;
+//
+//     KhataEntryModel? latestOpen;
+//
+//     for (final entry in entries) {
+//       if (entry.deviceId.trim() != deviceId!.trim()) continue;
+//       if (!entry.isOpen) continue;
+//       if (entry.startTime == null) continue;
+//       if (entry.endTime != null) continue;
+//
+//       if (latestOpen == null ||
+//           entry.startTime!.isAfter(latestOpen.startTime!)) {
+//         latestOpen = entry;
+//       }
 //     }
 //
-//     return DeviceConnectionStatus.waitingTelemetry;
+//     return latestOpen;
+//   }
+//
+//   Future<void> _restoreMotorSessionFromKhata() async {
+//     if (!hasDevice || isRestoringMotorSession) return;
+//
+//     isRestoringMotorSession = true;
+//
+//     try {
+//       final restoredEntry = _latestOpenKhataForCurrentDevice();
+//       final latest = ref.read(telemetryViewModelProvider).latest;
+//
+//       final hasFreshTelemetry = isDeviceOnline(latest);
+//       final vfdSaysRunning =
+//       hasFreshTelemetry ? isMotorRunning(latest) : false;
+//
+//       if (restoredEntry != null) {
+//         activeKhataEntry = restoredEntry;
+//
+//         final restoredCustomer = restoredEntry.customerName.trim();
+//         if (restoredCustomer.isNotEmpty &&
+//             customerNameController.text.trim().isEmpty) {
+//           customerNameController.text = restoredCustomer;
+//           customerNameController.selection = TextSelection.collapsed(
+//             offset: customerNameController.text.length,
+//           );
+//         }
+//
+//         // An open backend session is authoritative for elapsed time.
+//         // Even if the app was killed or the phone slept, elapsed time is
+//         // recalculated from this original timestamp instead of counting ticks.
+//         _startLocalTimer(startedAt: restoredEntry.startTime);
+//       } else {
+//         activeKhataEntry = null;
+//
+//         // If VFD is already running but there is no open app/Khata session,
+//         // we cannot invent an old start time. Start a local fallback from now.
+//         // A later backend/open-session refresh can replace this with the
+//         // authoritative timestamp.
+//         if (vfdSaysRunning && motorStartedAt == null) {
+//           _startLocalTimer(startedAt: DateTime.now());
+//         }
+//       }
+//
+//       // Fresh OFF telemetry means there is no running motor to display.
+//       // Do not let an old/stale timer survive a confirmed OFF state.
+//       if (hasFreshTelemetry && !vfdSaysRunning) {
+//         _stopLocalTimer();
+//
+//         if (mounted && runSeconds != 0) {
+//           setState(() {
+//             runSeconds = 0;
+//           });
+//         } else {
+//           runSeconds = 0;
+//         }
+//       }
+//     } finally {
+//       isRestoringMotorSession = false;
+//
+//       if (mounted) {
+//         setState(() {
+//           didRestoreMotorSession = true;
+//         });
+//       } else {
+//         didRestoreMotorSession = true;
+//       }
+//     }
+//   }
+//
+//   void _startLocalTimer({DateTime? startedAt}) {
+//     if (startedAt != null) {
+//       motorStartedAt = startedAt;
+//     } else {
+//       motorStartedAt ??= DateTime.now();
+//     }
+//
+//     runTimer?.cancel();
+//     _refreshRunSeconds();
+//
+//     runTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+//       _refreshRunSeconds();
+//     });
+//   }
+//
+//   void _refreshRunSeconds() {
+//     final startedAt = motorStartedAt;
+//     if (!mounted || startedAt == null) return;
+//
+//     final elapsed = DateTime.now().difference(startedAt).inSeconds;
+//     final safeElapsed = elapsed < 0 ? 0 : elapsed;
+//
+//     if (safeElapsed != runSeconds) {
+//       setState(() {
+//         runSeconds = safeElapsed;
+//       });
+//     }
+//   }
+//
+//   void _stopLocalTimer({bool resetStart = true}) {
+//     runTimer?.cancel();
+//     runTimer = null;
+//
+//     if (resetStart) {
+//       motorStartedAt = null;
+//     }
+//   }
+//
+//   String get runningTime {
+//     final seconds = runSeconds < 0 ? 0 : runSeconds;
+//     final h = (seconds ~/ 3600).toString().padLeft(2, "0");
+//     final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, "0");
+//     final s = (seconds % 60).toString().padLeft(2, "0");
+//     return "$h:$m:$s";
 //   }
 //
 //   String friendlyError(String? error) {
@@ -3599,9 +3658,7 @@
 //         text.contains("host lookup") ||
 //         text.contains("timeout") ||
 //         text.contains("receive timeout") ||
-//         text.contains("failed host lookup") ||
-//         text.contains("connection refused") ||
-//         text.contains("connection failed")) {
+//         text.contains("connection refused")) {
 //       return "No internet connection. Please check Wi-Fi or mobile data.";
 //     }
 //
@@ -3610,76 +3667,34 @@
 //     return error!;
 //   }
 //
-//   Future<void> loadTelemetry({bool showError = false}) async {
-//     if (isTelemetryLoading) return;
-//     if (!hasDevice) return;
-//
-//     isTelemetryLoading = true;
-//
-//     try {
-//       await ref.read(telemetryViewModelProvider.notifier).loadLatest(deviceId!);
-//
-//       if (!mounted) return;
-//
-//       final telemetryState = ref.read(telemetryViewModelProvider);
-//
-//       if (telemetryState.latest != null) {
-//         telemetryFailures = 0;
-//       } else if (telemetryState.error != null) {
-//         telemetryFailures++;
-//       }
-//     } catch (_) {
-//       telemetryFailures++;
-//     } finally {
-//       if (mounted) {
-//         setState(() {
-//           isTelemetryLoading = false;
-//         });
-//       }
-//     }
-//   }
-//
-//   void _startLocalTimer() {
-//     runTimer?.cancel();
-//     runSeconds = 0;
-//
-//     runTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-//       if (mounted) {
-//         setState(() {
-//           runSeconds++;
-//         });
-//       }
-//     });
-//   }
-//
-//   void _stopLocalTimer() {
-//     runTimer?.cancel();
-//     runTimer = null;
-//     runSeconds = 0;
-//   }
-//
-//   String get runningTime {
-//     final seconds = runSeconds <= 0 ? 1 : runSeconds;
-//     final h = (seconds ~/ 3600).toString().padLeft(2, "0");
-//     final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, "0");
-//     final s = (seconds % 60).toString().padLeft(2, "0");
-//     return "$h:$m:$s";
-//   }
-//
 //   String formatValue(
 //       double? value,
 //       String unit, {
 //         int decimals = 1,
-//         required DeviceConnectionStatus status,
 //       }) {
-//     if (status == DeviceConnectionStatus.noDevice) return "-- $unit";
+//     if (!hasDevice) return "-- $unit";
 //     if (value == null) return "-- $unit";
 //     return "${value.toStringAsFixed(decimals)} $unit";
 //   }
 //
-//   Future<void> toggleMotor(MotorSnapshot snapshot) async {
+//   Future<void> toggleMotor() async {
 //     if (!hasDevice) {
-//       showMessage("Device not connected. Please select a device first.", true);
+//       showMessage("Please select a device first.", true);
+//       return;
+//     }
+//
+//     final latest = ref.read(telemetryViewModelProvider).latest;
+//
+//     final deviceOnline = isDeviceOnline(latest);
+//     final motorRunning = isMotorRunning(latest);
+//     final telemetryTimestampBeforeCommand = _toInt(latest?.timestamp);
+//
+//     if (!deviceOnline) {
+//       showMessage(
+//         "Device is offline. Wait for live telemetry before motor control.",
+//         true,
+//         seconds: 8,
+//       );
 //       return;
 //     }
 //
@@ -3687,83 +3702,240 @@
 //     HapticFeedback.mediumImpact();
 //
 //     final typedCustomerName = customerNameController.text.trim();
-//     final customerName =
-//     typedCustomerName.isEmpty ? "Mobile App" : typedCustomerName;
-//
 //     final motorVm = ref.read(motorViewModelProvider.notifier);
 //
-//     try {
-//       if (snapshot.isRunning) {
-//         final stoppedRunSeconds = runSeconds <= 0 ? 1 : runSeconds;
+//     // Validate before showing the command spinner.
+//     if (!motorRunning && typedCustomerName.isEmpty) {
+//       showMessage("Customer name is required to start motor.", true);
+//       return;
+//     }
 //
+//     if (mounted) {
+//       setState(() {
+//         motorStateBeforePendingCommand = motorRunning;
+//         isWaitingForVfdConfirmation = true;
+//       });
+//     }
+//
+//     try {
+//       if (motorRunning) {
 //         final stoppedLog = await motorVm.stopMotor(
 //           deviceId: deviceId!,
-//           customerName: customerName,
+//           customerName: activeKhataEntry?.customerName ??
+//               (typedCustomerName.isEmpty ? "Mobile App" : typedCustomerName),
 //         );
 //
-//         final motorState = ref.read(motorViewModelProvider);
-//         if (motorState.error != null) {
-//           showMessage(motorState.error.toString(), true, seconds: 10);
+//         final updatedMotorState = ref.read(motorViewModelProvider);
+//
+//         if (updatedMotorState.error != null) {
+//           showMessage(updatedMotorState.error!, true, seconds: 10);
 //           return;
 //         }
 //
+//         final endTime = stoppedLog?.endTime ?? DateTime.now();
+//
+//         // Do NOT close Khata or show OFF just because the stop API returned.
+//         // Billing/timer stop only after VFD telemetry itself confirms OFF.
+//         final vfdConfirmedOff = await _waitForVfdConfirmation(
+//           expectedOn: false,
+//           telemetryTimestampBeforeCommand: telemetryTimestampBeforeCommand,
+//         );
+//
+//         if (!vfdConfirmedOff) {
+//           showMessage(
+//             "Stop command was sent, but OFF confirmation was not received from VFD telemetry.",
+//             true,
+//             seconds: 10,
+//           );
+//           return;
+//         }
+//
+//         // VFD is physically OFF now. Stop the HOME timer immediately.
+//         // Khata finalization is a separate server operation and must never
+//         // keep the physical motor timer running.
 //         _stopLocalTimer();
 //
-//         if (stoppedLog != null) {
-//           await ref.read(khataViewModelProvider.notifier).createFromMotorLog(
-//             log: stoppedLog,
-//             customerName: customerName,
-//             deviceId: deviceId!,
-//             pricePerHour: 0,
-//             cashReceived: 0,
-//             fallbackRunSeconds: stoppedRunSeconds,
-//           );
+//         if (mounted) {
+//           setState(() {
+//             runSeconds = 0;
+//           });
+//         } else {
+//           runSeconds = 0;
 //         }
 //
-//         await loadTelemetry(showError: false);
+//         // Do not rely only on the in-memory activeKhataEntry.
+//         // It can be lost after navigation/app resume/rebuild.
+//         // Reload from server and recover the real open entry if needed.
 //         await ref.read(khataViewModelProvider.notifier).loadEntries();
 //
-//         final khataState = ref.read(khataViewModelProvider);
-//         if (khataState.error != null) {
+//         final entryToClose =
+//             activeKhataEntry ?? _latestOpenKhataForCurrentDevice();
+//
+//         if (entryToClose == null) {
+//           activeKhataEntry = null;
+//
 //           showMessage(
-//             "Motor stopped, but Khata was not created: ${khataState.error}",
-//             true,
-//             seconds: 12,
+//             "Motor stopped. No open Khata session was found to finalize.",
+//             false,
 //           );
 //           return;
 //         }
 //
-//         showMessage("Motor stopped. Khata entry created.", false);
+//         final closedEntry =
+//         await ref.read(khataViewModelProvider.notifier).closeMotorKhataSession(
+//           entry: entryToClose,
+//           endTime: endTime,
+//         );
+//
+//         // IMPORTANT:
+//         // Never forget the open entry when the close API failed.
+//         // Previous code set activeKhataEntry=null even when ViewModel
+//         // returned null, leaving backend is_open=true forever.
+//         if (closedEntry == null) {
+//           activeKhataEntry = entryToClose;
+//
+//           final khataError = ref.read(khataViewModelProvider).error;
+//
+//           showMessage(
+//             "Motor is OFF, but Khata finalization failed: "
+//                 "${khataError ?? "Unknown Khata close error"}",
+//             true,
+//             seconds: 14,
+//           );
+//           return;
+//         }
+//
+//         activeKhataEntry = null;
+//
+//         // Reload the authoritative finalized values:
+//         // ended_at, is_open=false, run_hours and recalculated bill.
+//         await ref.read(khataViewModelProvider.notifier).loadEntries();
+//
+//         final stillOpen = _latestOpenKhataForCurrentDevice();
+//
+//         if (stillOpen != null &&
+//             stillOpen.id == closedEntry.id) {
+//           activeKhataEntry = stillOpen;
+//
+//           showMessage(
+//             "Motor is OFF, but backend still reports this Khata as open.",
+//             true,
+//             seconds: 14,
+//           );
+//           return;
+//         }
+//
+//         showMessage(
+//           "Motor stopped. Khata finalized: "
+//               "${closedEntry.runHours.toStringAsFixed(2)} hr.",
+//           false,
+//         );
 //         return;
 //       }
 //
-//       if (typedCustomerName.isEmpty) {
-//         showMessage("Customer name is required to start motor.", true);
-//         return;
-//       }
-//
-//       await motorVm.startMotor(
+//       final startedLog = await motorVm.startMotor(
 //         deviceId: deviceId!,
 //         customerName: typedCustomerName,
 //       );
 //
-//       final motorState = ref.read(motorViewModelProvider);
-//       if (motorState.error != null) {
-//         showMessage(motorState.error.toString(), true, seconds: 10);
+//       final motorCommandStartedAt = startedLog?.startTime ?? DateTime.now();
+//
+//       final updatedMotorState = ref.read(motorViewModelProvider);
+//
+//       if (updatedMotorState.error != null) {
+//         showMessage(updatedMotorState.error!, true, seconds: 10);
 //         return;
 //       }
 //
-//       _startLocalTimer();
+//       // Do NOT open Khata or show ON just because the start API returned.
+//       // Billing/timer begin only after VFD telemetry itself confirms ON.
+//       final vfdConfirmedOn = await _waitForVfdConfirmation(
+//         expectedOn: true,
+//         telemetryTimestampBeforeCommand: telemetryTimestampBeforeCommand,
+//       );
 //
-//       await loadTelemetry(showError: false);
+//       if (!vfdConfirmedOn) {
+//         showMessage(
+//           "Start command was sent, but ON confirmation was not received from VFD telemetry.",
+//           true,
+//           seconds: 10,
+//         );
+//         return;
+//       }
 //
-//       showMessage("Motor started successfully", false);
+//       // VFD has confirmed ON, so the motor timer must run even if
+//       // Khata creation fails. Billing failure must never make the UI
+//       // pretend the motor is stopped.
+//       if (mounted) {
+//         setState(() {
+//           runSeconds = 0;
+//         });
+//       }
+//
+//       _startLocalTimer(startedAt: motorCommandStartedAt);
+//
+//       // A real MotorLog UUID is mandatory for an open Khata session.
+//       // run_hours is intentionally 0 while the motor is still running.
+//       if (startedLog == null) {
+//         showMessage(
+//           "Motor is ON, but start API returned no MotorLog. Khata was not created.",
+//           true,
+//           seconds: 12,
+//         );
+//         return;
+//       }
+//
+//       final motorLogId = startedLog.id?.trim() ?? "";
+//
+//       if (motorLogId.isEmpty) {
+//         showMessage(
+//           "Motor is ON, but MotorLog ID is missing from the start response. "
+//               "Khata was not created. Check POST /motor/$deviceId/start response.",
+//           true,
+//           seconds: 14,
+//         );
+//         return;
+//       }
+//
+//       activeKhataEntry =
+//       await ref.read(khataViewModelProvider.notifier).startMotorKhataSession(
+//         customerName: typedCustomerName,
+//         deviceId: deviceId!,
+//         motorLogId: motorLogId,
+//         startTime: startedLog.startTime ?? motorCommandStartedAt,
+//       );
+//
+//       if (activeKhataEntry == null) {
+//         final khataError = ref.read(khataViewModelProvider).error;
+//
+//         showMessage(
+//           "Motor is ON, but Khata was not created: "
+//               "${khataError ?? "Unknown Khata API error"}",
+//           true,
+//           seconds: 14,
+//         );
+//         return;
+//       }
+//
+//       await ref.read(khataViewModelProvider.notifier).loadEntries();
+//
+//       showMessage("Motor started. Khata session opened.", false);
 //     } catch (e) {
 //       showMessage(
 //         "Motor action failed: ${friendlyError(e.toString())}",
 //         true,
 //         seconds: 12,
 //       );
+//     } finally {
+//       if (mounted) {
+//         setState(() {
+//           isWaitingForVfdConfirmation = false;
+//           motorStateBeforePendingCommand = null;
+//         });
+//       } else {
+//         isWaitingForVfdConfirmation = false;
+//         motorStateBeforePendingCommand = null;
+//       }
 //     }
 //   }
 //
@@ -3796,44 +3968,81 @@
 //     if (!hasDevice) return <String>[];
 //
 //     final khataState = ref.watch(khataViewModelProvider);
-//     final names = <String>{};
+//     final names = <String>[];
+//     final seen = <String>{};
 //
-//     for (final entry in khataState.entries) {
+//     // Newest customers first. Duplicate names are removed case-insensitively.
+//     for (final entry in khataState.entries.reversed) {
 //       final name = entry.customerName?.trim();
-//       if (name != null && name.isNotEmpty) names.add(name);
+//       if (name == null || name.isEmpty) continue;
+//
+//       final key = name.toLowerCase();
+//       if (seen.add(key)) {
+//         names.add(name);
+//       }
 //     }
 //
-//     final list = names.toList();
-//     list.sort();
-//     return list;
+//     return names.take(20).toList();
 //   }
 //
 //   @override
 //   Widget build(BuildContext context) {
-//     final motorState = ref.watch(motorViewModelProvider);
-//     final telemetryState = ref.watch(telemetryViewModelProvider);
-//     final latest = hasDevice ? telemetryState.latest : null;
-//     final status = connectionStatus(latest);
-//
-//     final snapshot = MotorSnapshot.fromTelemetry(
-//       latest: latest,
-//       status: status,
+//     final latest = ref.watch(
+//       telemetryViewModelProvider.select((state) => state.latest),
 //     );
 //
-//     if (snapshot.isRunning && runTimer == null) {
+//     final motorLoading = ref.watch(
+//       motorViewModelProvider.select((state) => state.isLoading),
+//     );
+//
+//     final motorButtonLoading =
+//         hasDevice && (motorLoading || isWaitingForVfdConfirmation);
+//
+//     final checkingDevice = hasDevice && !firstTelemetryLoaded;
+//
+//     final effectiveLatest = hasDevice && firstTelemetryLoaded ? latest : null;
+//
+//     final deviceOnline = checkingDevice ? false : isDeviceOnline(effectiveLatest);
+//     final telemetryMotorRunning =
+//     checkingDevice ? false : isMotorRunning(effectiveLatest);
+//
+//     final motorRunning = isWaitingForVfdConfirmation &&
+//         motorStateBeforePendingCommand != null
+//         ? motorStateBeforePendingCommand!
+//         : telemetryMotorRunning;
+//
+//     final displayLatest = deviceOnline ? effectiveLatest : null;
+//
+//     if (motorRunning &&
+//         runTimer == null &&
+//         !isWaitingForVfdConfirmation &&
+//         didRestoreMotorSession) {
 //       WidgetsBinding.instance.addPostFrameCallback((_) {
-//         if (mounted && runTimer == null) _startLocalTimer();
+//         if (mounted && runTimer == null) {
+//           _startLocalTimer(
+//             startedAt: activeKhataEntry?.startTime ?? motorStartedAt,
+//           );
+//         }
 //       });
 //     }
 //
-//     if (!snapshot.isRunning && runTimer != null) {
+//     // Never reset the run timer just because telemetry becomes stale while
+//     // the app is backgrounded. Stop it only when fresh VFD telemetry says OFF.
+//     if (deviceOnline &&
+//         !telemetryMotorRunning &&
+//         runTimer != null &&
+//         !isWaitingForVfdConfirmation) {
 //       WidgetsBinding.instance.addPostFrameCallback((_) {
-//         if (mounted && runTimer != null) _stopLocalTimer();
+//         if (mounted && runTimer != null) {
+//           _stopLocalTimer();
+//           setState(() {
+//             runSeconds = 0;
+//           });
+//         }
 //       });
 //     }
 //
-//     final size = MediaQuery.of(context).size;
-//     final width = size.width;
+//     final width = MediaQuery.of(context).size.width;
 //
 //     final isVerySmall = width < 360;
 //     final isTablet = width >= 650;
@@ -3869,65 +4078,31 @@
 //         ? deviceName!
 //         : hasDevice
 //         ? deviceId!
-//         : "Device not connected";
+//         : "Smart Motor Controller";
 //
 //     return Scaffold(
 //       backgroundColor: AppColors.darkBgSoft,
 //       drawer: hasDevice ? ProfessionalDrawer(deviceId: deviceId!) : null,
-//       appBar: AppBar(
-//         backgroundColor: AppColors.darkSurfaceSoft,
-//         elevation: 0,
-//         centerTitle: true,
-//         iconTheme: const IconThemeData(color: AppColors.white),
-//         title: Column(
-//           mainAxisSize: MainAxisSize.min,
-//           children: [
-//             Text(
-//               "SmartWell VFD",
-//               maxLines: 1,
-//               overflow: TextOverflow.ellipsis,
-//               style: TextStyle(
-//                 color: AppColors.white,
-//                 fontSize: isVerySmall ? 18 : 21,
-//                 fontWeight: FontWeight.w900,
-//               ),
-//             ),
-//             const SizedBox(height: 2),
-//             Text(
-//               resolvedDisplayName,
-//               maxLines: 1,
-//               overflow: TextOverflow.ellipsis,
-//               style: TextStyle(
-//                 color: status == DeviceConnectionStatus.connected
-//                     ? AppColors.primary.withOpacity(0.88)
-//                     : AppColors.warning,
-//                 fontSize: isVerySmall ? 10 : 11,
-//                 fontWeight: FontWeight.w700,
-//               ),
-//             ),
-//           ],
-//         ),
-//         actions: [
-//           IconButton(
-//             tooltip: "Change device",
-//             onPressed: () {
-//               Navigator.pushReplacementNamed(context, AppRoutes.devices);
-//             },
-//             icon: const Icon(Icons.devices_other_rounded),
-//           ),
-//         ],
+//       appBar: SmartWellHomeAppBar(
+//         hasDevice: hasDevice,
+//         deviceOnline: deviceOnline,
+//         onSelectDevice: () {
+//           Navigator.pushReplacementNamed(context, AppRoutes.devices);
+//         },
 //       ),
 //       body: SafeArea(
 //         child: RefreshIndicator(
+//           color: AppColors.primary,
+//           backgroundColor: AppColors.cardDark,
 //           onRefresh: () async {
 //             if (hasDevice) {
-//               await loadTelemetry();
+//               await loadTelemetry(showError: true);
+//               await ref.read(khataViewModelProvider.notifier).loadEntries();
+//               await _restoreMotorSessionFromKhata();
 //             } else {
-//               showMessage("Device not connected. Please select a device.", true);
+//               showMessage("Please select a device first.", true);
 //             }
 //           },
-//           color: AppColors.primary,
-//           backgroundColor: AppColors.surfaceDark,
 //           child: SingleChildScrollView(
 //             physics: const AlwaysScrollableScrollPhysics(
 //               parent: BouncingScrollPhysics(),
@@ -3942,194 +4117,143 @@
 //                 child: Column(
 //                   crossAxisAlignment: CrossAxisAlignment.stretch,
 //                   children: [
-//                     VfdHeaderCard(
+//                     // SmartDeviceHeaderCard(
+//                     //   hasDevice: hasDevice,
+//                     //   deviceOnline: deviceOnline,
+//                     //   motorRunning: motorRunning,
+//                     //   displayName: resolvedDisplayName,
+//                     //   deviceId: deviceId,
+//                     // ),
+//                     SmartDeviceHeaderCard(
+//                       hasDevice: hasDevice,
+//                       deviceOnline: deviceOnline,
+//                       motorRunning: motorRunning,
 //                       displayName: resolvedDisplayName,
-//                       snapshot: snapshot,
-//                       frequencyText: formatValue(
-//                         latest?.freq,
-//                         "Hz",
-//                         decimals: 1,
-//                         status: status,
-//                       ),
-//                       referenceFrequencyText: formatValue(
-//                         latest?.referenceFreq ?? latest?.freq,
-//                         "Hz",
-//                         decimals: 1,
-//                         status: status,
-//                       ),
+//                       deviceId: deviceId,
+//                       triggerType: telemetry.triggerType,
 //                     ),
-//                     if (status == DeviceConnectionStatus.noDevice)
-//                       const Padding(
-//                         padding: EdgeInsets.only(top: 10),
-//                         child: DeviceNotConnectedBadge(),
+//                     if (!hasDevice) ...[
+//                       const SizedBox(height: 12),
+//                       NoDeviceProfessionalNotice(
+//                         onSelectDevice: () {
+//                           Navigator.pushReplacementNamed(
+//                             context,
+//                             AppRoutes.devices,
+//                           );
+//                         },
 //                       ),
-//                     if (status == DeviceConnectionStatus.waitingTelemetry)
-//                       const Padding(
-//                         padding: EdgeInsets.only(top: 10),
-//                         child: WaitingTelemetryBadge(),
+//                     ],
+//                     if (hasDevice && !deviceOnline) ...[
+//                       const SizedBox(height: 12),
+//                       DeviceOfflineNotice(
+//                         onRetry: () => loadTelemetry(showError: true),
 //                       ),
-//                     if (status == DeviceConnectionStatus.disconnected)
-//                       const Padding(
-//                         padding: EdgeInsets.only(top: 10),
-//                         child: DeviceDisconnectedBadge(),
+//                     ],
+//                     if (hasDevice && deviceOnline) ...[
+//                       const SizedBox(height: 12),
+//                       DeviceOnlineNotice(
+//                         motorRunning: motorRunning,
 //                       ),
-//                     const SizedBox(height: 16),
-//                     StatusPanel(
-//                       snapshot: snapshot,
-//                       pulseAnimation: pulseAnimation,
-//                     ),
-//                     const SizedBox(height: 16),
-//                     SystemBanner(snapshot: snapshot),
-//                     if (snapshot.hasFault && !snapshot.hasTelemetryError) ...[
-//                       const SizedBox(height: 14),
-//                       FaultAlertCard(snapshot: snapshot),
 //                     ],
 //                     const SizedBox(height: 18),
-//                     CustomerNameField(
+//                     CustomerNameInputCard(
 //                       controller: customerNameController,
 //                       focusNode: customerNameFocusNode,
 //                       suggestions: customerSuggestions(),
-//                       enabled: hasDevice,
+//                       enabled: hasDevice && deviceOnline,
 //                     ),
 //                     const SizedBox(height: 26),
 //                     Center(
 //                       child: GestureDetector(
-//                         onTap: motorState.isLoading
-//                             ? null
-//                             : () => toggleMotor(snapshot),
+//                         onTap: motorButtonLoading ? null : toggleMotor,
 //                         child: AnimatedBuilder(
 //                           animation: pulseAnimation,
 //                           builder: (context, child) {
-//                             final scale = snapshot.isRunning
+//                             final scale = motorButtonLoading
+//                                 ? 1.0
+//                                 : motorRunning
 //                                 ? 1.0 + ((pulseAnimation.value - 1.0) * 0.28)
 //                                 : 1.0;
+//
 //                             return Transform.scale(
 //                               scale: scale,
 //                               child: child,
 //                             );
 //                           },
-//                           child: MotorButton(
-//                             snapshot: snapshot,
-//                             loading: hasDevice && motorState.isLoading,
+//                           child: MotorCommandButton(
+//                             hasDevice: hasDevice,
+//                             deviceOnline: deviceOnline,
+//                             isOn: motorRunning,
+//                             loading: motorButtonLoading,
 //                             size: buttonSize,
 //                           ),
 //                         ),
 //                       ),
 //                     ),
 //                     const SizedBox(height: 18),
-//                     Center(
-//                       child: Text(
-//                         snapshot.isRunning
-//                             ? "Running | $runningTime"
-//                             : snapshot.centerStatusText,
-//                         textAlign: TextAlign.center,
-//                         style: TextStyle(
-//                           color: AppColors.white.withOpacity(0.76),
-//                           fontSize: isVerySmall ? 14 : 16,
-//                           fontWeight: FontWeight.w700,
-//                         ),
-//                       ),
+//                     MotorRunStatusCard(
+//                       hasDevice: hasDevice,
+//                       deviceOnline: deviceOnline,
+//                       isOn: motorRunning,
+//                       waitingForVfd: isWaitingForVfdConfirmation,
+//                       runningTime: runningTime,
 //                     ),
 //                     const SizedBox(height: 22),
-//                     if (hasDevice && telemetryState.isLoading && latest == null)
-//                       const Padding(
-//                         padding: EdgeInsets.all(22),
-//                         child: Center(
-//                           child: CircularProgressIndicator(
-//                             color: AppColors.white,
-//                           ),
-//                         ),
-//                       ),
-//                     const SizedBox(height: 14),
-//                     GridView.count(
-//                       shrinkWrap: true,
-//                       physics: const NeverScrollableScrollPhysics(),
+//                     ParameterGridSection(
 //                       crossAxisCount: crossAxisCount,
-//                       crossAxisSpacing: 14,
-//                       mainAxisSpacing: 14,
 //                       childAspectRatio: childAspectRatio,
-//                       children: [
-//                         MetricCard(
+//                       metrics: [
+//                         ParameterMetric(
 //                           icon: Icons.sync_rounded,
 //                           title: "Frequency",
-//                           value: formatValue(
-//                             latest?.freq,
-//                             "Hz",
-//                             status: status,
-//                           ),
+//                           value: formatValue(displayLatest?.freq, "Hz"),
 //                           highlight: true,
 //                         ),
-//                         MetricCard(
+//                         ParameterMetric(
 //                           icon: Icons.bolt_rounded,
 //                           title: "Voltage",
-//                           value: formatValue(
-//                             latest?.voltage,
-//                             "V",
-//                             status: status,
-//                           ),
+//                           value: formatValue(displayLatest?.voltage, "V"),
 //                         ),
-//                         MetricCard(
+//                         ParameterMetric(
 //                           icon: Icons.flash_on_rounded,
 //                           title: "Current",
-//                           value: formatValue(
-//                             latest?.current,
-//                             "A",
-//                             status: status,
-//                           ),
+//                           value: formatValue(displayLatest?.current, "A"),
 //                         ),
-//                         MetricCard(
+//                         ParameterMetric(
 //                           icon: Icons.power_rounded,
 //                           title: "Power",
-//                           value: formatValue(
-//                             latest?.power,
-//                             "kW",
-//                             status: status,
-//                           ),
+//                           value: formatValue(displayLatest?.power, "kW"),
 //                         ),
-//                         MetricCard(
+//                         ParameterMetric(
 //                           icon: Icons.speed_rounded,
 //                           title: "Load",
 //                           value: formatValue(
-//                             latest?.powerPercent,
+//                             displayLatest?.powerPercent,
 //                             "%",
-//                             status: status,
 //                           ),
 //                         ),
-//                         MetricCard(
+//                         ParameterMetric(
 //                           icon: Icons.rotate_right_rounded,
 //                           title: "Motor Speed",
 //                           value: formatValue(
-//                             latest?.motorSpeed,
+//                             displayLatest?.motorSpeed,
 //                             "RPM",
-//                             status: status,
 //                           ),
 //                         ),
-//                         MetricCard(
+//                         ParameterMetric(
 //                           icon: Icons.battery_charging_full_rounded,
 //                           title: "DC Bus",
-//                           value: formatValue(
-//                             latest?.dcbus,
-//                             "V",
-//                             status: status,
-//                           ),
+//                           value: formatValue(displayLatest?.dcbus, "V"),
 //                         ),
-//                         MetricCard(
+//                         ParameterMetric(
 //                           icon: Icons.electric_meter_rounded,
 //                           title: "Energy",
 //                           value: formatValue(
-//                             latest?.energyIn,
+//                             displayLatest?.energyIn,
 //                             "kWh",
-//                             status: status,
 //                           ),
 //                         ),
 //                       ],
-//                     ),
-//                     const SizedBox(height: 20),
-//                     DeviceSessionCard(
-//                       deviceName: deviceName,
-//                       deviceId: deviceId,
-//                       snapshot: snapshot,
-//                       timestamp: latest?.timestamp,
 //                     ),
 //                   ],
 //                 ),
@@ -4142,263 +4266,219 @@
 //   }
 // }
 //
-// class MotorSnapshot {
-//   final bool isRunning;
-//   final bool hasFault;
-//   final bool hasTelemetryError;
-//   final int? statusCode;
-//   final int? faultCode;
-//   final int? isLive;
-//   final DeviceConnectionStatus connectionStatus;
+// class SmartWellHomeAppBar extends StatelessWidget
+//     implements PreferredSizeWidget {
+//   final bool hasDevice;
+//   final bool deviceOnline;
+//   final VoidCallback onSelectDevice;
 //
-//   const MotorSnapshot({
-//     required this.isRunning,
-//     required this.hasFault,
-//     required this.hasTelemetryError,
-//     required this.statusCode,
-//     required this.faultCode,
-//     required this.isLive,
-//     required this.connectionStatus,
-//   });
-//
-//   bool get hasDevice => connectionStatus != DeviceConnectionStatus.noDevice;
-//
-//   factory MotorSnapshot.fromTelemetry({
-//     required dynamic latest,
-//     required DeviceConnectionStatus status,
-//   }) {
-//     final int? statusCode = latest?.statusCode;
-//     final int? faultCode = latest?.faultCode;
-//     final int? fault = latest?.fault;
-//     final int? isLive = latest?.isLive;
-//
-//     final hasFault = status == DeviceConnectionStatus.connected &&
-//         ((fault ?? 0) == 1 || (faultCode ?? 0) > 0 || statusCode == 4);
-//
-//     final isRunning =
-//         status == DeviceConnectionStatus.connected && isLive == 1;
-//
-//     return MotorSnapshot(
-//       isRunning: isRunning,
-//       hasFault: hasFault,
-//       hasTelemetryError: status == DeviceConnectionStatus.disconnected,
-//       statusCode: latest == null ? null : statusCode,
-//       faultCode: latest == null ? null : faultCode,
-//       isLive: latest == null ? null : isLive,
-//       connectionStatus: status,
-//     );
-//   }
-//
-//   String get statusName {
-//     switch (connectionStatus) {
-//       case DeviceConnectionStatus.noDevice:
-//         return "Device Not Connected";
-//       case DeviceConnectionStatus.waitingTelemetry:
-//         return "Waiting for Telemetry";
-//       case DeviceConnectionStatus.disconnected:
-//         return "Device Disconnected";
-//       case DeviceConnectionStatus.connected:
-//         break;
-//     }
-//
-//     if (hasFault) return "Fault Active";
-//     if (isRunning) return "Running";
-//     if (statusCode == 3) return "Standby";
-//     if (statusCode == 5) return "VFD Off";
-//     return "System Ready";
-//   }
-//
-//   String get centerStatusText {
-//     switch (connectionStatus) {
-//       case DeviceConnectionStatus.noDevice:
-//         return "Device not connected";
-//       case DeviceConnectionStatus.waitingTelemetry:
-//         return "Waiting for live readings";
-//       case DeviceConnectionStatus.disconnected:
-//         return "Device disconnected";
-//       case DeviceConnectionStatus.connected:
-//         break;
-//     }
-//
-//     if (hasFault) return faultName;
-//     if (isRunning) return "Running";
-//     if (statusCode == 5) return "VFD Off";
-//     return "System Ready";
-//   }
-//
-//   Color get bannerColor {
-//     switch (connectionStatus) {
-//       case DeviceConnectionStatus.noDevice:
-//         return AppColors.warning;
-//       case DeviceConnectionStatus.waitingTelemetry:
-//         return AppColors.primary;
-//       case DeviceConnectionStatus.disconnected:
-//         return AppColors.warning;
-//       case DeviceConnectionStatus.connected:
-//         break;
-//     }
-//
-//     if (hasFault) return AppColors.error;
-//     if (isRunning) return AppColors.green;
-//     if (statusCode == 5) return AppColors.blueDark;
-//     return AppColors.primary;
-//   }
-//
-//   IconData get bannerIcon {
-//     switch (connectionStatus) {
-//       case DeviceConnectionStatus.noDevice:
-//         return Icons.link_off_rounded;
-//       case DeviceConnectionStatus.waitingTelemetry:
-//         return Icons.sync_rounded;
-//       case DeviceConnectionStatus.disconnected:
-//         return Icons.wifi_off_rounded;
-//       case DeviceConnectionStatus.connected:
-//         break;
-//     }
-//
-//     if (hasFault) return Icons.warning_amber_rounded;
-//     if (isRunning) return Icons.check_circle_rounded;
-//     if (statusCode == 5) return Icons.power_off_rounded;
-//     return Icons.verified_rounded;
-//   }
-//
-//   String get faultName {
-//     switch (faultCode ?? 0) {
-//       case 0:
-//         return "No Fault";
-//       case 1:
-//         return "OUT1";
-//       case 2:
-//         return "OUT2";
-//       case 3:
-//         return "OUT3";
-//       case 4:
-//         return "OC1";
-//       case 5:
-//         return "OC2";
-//       case 6:
-//         return "OC3";
-//       case 7:
-//         return "OV1";
-//       case 8:
-//         return "OV2";
-//       case 9:
-//         return "OV3";
-//       case 10:
-//         return "UV";
-//       case 11:
-//         return "OL1";
-//       case 12:
-//         return "OL2";
-//       case 13:
-//         return "SPI";
-//       case 14:
-//         return "SPO";
-//       case 15:
-//         return "OH1";
-//       case 16:
-//         return "OH2";
-//       case 17:
-//         return "EF";
-//       case 18:
-//         return "CE";
-//       case 19:
-//         return "ItE";
-//       default:
-//         return "Unknown Fault";
-//     }
-//   }
-//
-//   String get faultDescription {
-//     switch (faultCode ?? 0) {
-//       case 0:
-//         return "Drive operating normally.";
-//       case 1:
-//         return "Output phase fault. Check motor cable, output terminal, or missing motor phase.";
-//       case 2:
-//         return "Output abnormality. Check motor short circuit or output wiring.";
-//       case 3:
-//         return "Output phase imbalance. Check open phase or motor winding damage.";
-//       case 4:
-//         return "Acceleration overcurrent. Check acceleration time, heavy load, or jammed motor.";
-//       case 5:
-//         return "Deceleration overcurrent. Check deceleration time or high inertia load.";
-//       case 6:
-//         return "Constant speed overcurrent. Check mechanical overload or motor current.";
-//       case 7:
-//         return "Acceleration overvoltage. DC bus voltage is too high during acceleration.";
-//       case 8:
-//         return "Deceleration overvoltage. Check fast deceleration or braking resistor.";
-//       case 9:
-//         return "Constant overvoltage. Check supply voltage.";
-//       case 10:
-//         return "Under voltage. Check weak supply or loose input cable.";
-//       case 11:
-//         return "Motor overload. Current stayed too high for long duration.";
-//       case 12:
-//         return "Drive overload. Load may exceed VFD capacity.";
-//       case 13:
-//         return "Internal communication fault.";
-//       case 14:
-//         return "Output protection triggered.";
-//       case 15:
-//         return "Drive overheat. Check cooling fan and ventilation.";
-//       case 16:
-//         return "Motor overheat. Motor thermal protection triggered.";
-//       case 17:
-//         return "External fault. External safety device triggered.";
-//       case 18:
-//         return "Communication error.";
-//       case 19:
-//         return "Current detection error.";
-//       default:
-//         return "Unknown fault code.";
-//     }
-//   }
-// }
-//
-// class VfdHeaderCard extends StatelessWidget {
-//   final String displayName;
-//   final MotorSnapshot snapshot;
-//   final String frequencyText;
-//   final String referenceFrequencyText;
-//
-//   const VfdHeaderCard({
+//   const SmartWellHomeAppBar({
 //     super.key,
-//     required this.displayName,
-//     required this.snapshot,
-//     required this.frequencyText,
-//     required this.referenceFrequencyText,
+//     required this.hasDevice,
+//     required this.deviceOnline,
+//     required this.onSelectDevice,
 //   });
 //
 //   @override
+//   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+//
+//   @override
 //   Widget build(BuildContext context) {
-//     final width = MediaQuery.of(context).size.width;
-//     final compact = width < 390;
+//     final statusText = !hasDevice
+//         ? "No device selected"
+//         : deviceOnline
+//         ? "Device online"
+//         : "Waiting for device";
+//
+//     final statusColor = !hasDevice
+//         ? AppColors.white.withOpacity(0.55)
+//         : deviceOnline
+//         ? AppColors.green
+//         : AppColors.warning;
+//
+//     return AppBar(
+//       backgroundColor: AppColors.primaryDark,
+//       elevation: 0,
+//       centerTitle: false,
+//       automaticallyImplyLeading: hasDevice,
+//       iconTheme: const IconThemeData(color: AppColors.white),
+//       titleSpacing: 18,
+//       title: Row(
+//         children: [
+//           Container(
+//             height: 42,
+//             width: 42,
+//             decoration: BoxDecoration(
+//               borderRadius: BorderRadius.circular(14),
+//               gradient: LinearGradient(
+//                 colors: [
+//                   AppColors.darkBgSoft,
+//                   AppColors.darkBgSoft.withOpacity(0.72),
+//                 ],
+//               ),
+//             ),
+//             child: const Icon(
+//               Icons.electric_bolt_rounded,
+//               color: AppColors.white,
+//               size: 24,
+//             ),
+//           ),
+//           const SizedBox(width: 14),
+//           Expanded(
+//             child: Column(
+//               crossAxisAlignment: CrossAxisAlignment.start,
+//               mainAxisSize: MainAxisSize.min,
+//               children: [
+//                 const Text(
+//                   "AabNex",
+//                   maxLines: 1,
+//                   overflow: TextOverflow.ellipsis,
+//                   style: TextStyle(
+//                     color: AppColors.white,
+//                     fontSize: 20,
+//                     fontWeight: FontWeight.w900,
+//                   ),
+//                 ),
+//                 const SizedBox(height: 2),
+//                 Text(
+//                   statusText,
+//                   maxLines: 1,
+//                   overflow: TextOverflow.ellipsis,
+//                   style: TextStyle(
+//                     color: statusColor,
+//                     fontSize: 11.5,
+//                     fontWeight: FontWeight.w800,
+//                   ),
+//                 ),
+//               ],
+//             ),
+//           ),
+//         ],
+//       ),
+//       actions: [
+//         Padding(
+//           padding: const EdgeInsets.only(right: 10),
+//           child: IconButton(
+//             tooltip: "Select Device",
+//             onPressed: onSelectDevice,
+//             icon: Container(
+//               padding: const EdgeInsets.all(10),
+//               decoration: BoxDecoration(
+//                 color: AppColors.cardDark,
+//                 borderRadius: BorderRadius.circular(14),
+//                 border: Border.all(color: AppColors.borderDark),
+//               ),
+//               child: const Icon(
+//                 Icons.devices_other_rounded,
+//                 color: AppColors.primary,
+//                 size: 22,
+//               ),
+//             ),
+//           ),
+//         ),
+//       ],
+//     );
+//   }
+// }
+//
+// class SmartDeviceHeaderCard extends StatelessWidget {
+//   final bool hasDevice;
+//   final bool deviceOnline;
+//   final bool motorRunning;
+//   final String displayName;
+//   final String? deviceId;
+//   final String? triggerType;
+//
+//   const SmartDeviceHeaderCard({
+//     super.key,
+//     required this.hasDevice,
+//     required this.deviceOnline,
+//     required this.motorRunning,
+//     required this.displayName,
+//     required this.deviceId,
+//     this.triggerType,
+//   });
+//
+//   String _formatTriggerType(String? value) {
+//     switch (value?.toLowerCase().trim()) {
+//       case 'physical':
+//         return 'Physical Button';
+//
+//       case 'time':
+//       case 'timer':
+//         return 'Timer';
+//
+//       case 'schedule':
+//         return 'Schedule';
+//
+//       case 'app':
+//         return 'App';
+//
+//       default:
+//         return 'Unknown';
+//     }
+//   }
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final color = !hasDevice
+//         ? AppColors.primary
+//         : !deviceOnline
+//         ? AppColors.warning
+//         : motorRunning
+//         ? AppColors.green
+//         : AppColors.primary;
+//
+//     final icon = !hasDevice
+//         ? Icons.hub_outlined
+//         : !deviceOnline
+//         ? Icons.wifi_tethering_error_rounded
+//         : motorRunning
+//         ? Icons.power_settings_new_rounded
+//         : Icons.verified_rounded;
+//
+//     final statusText = !hasDevice
+//         ? "Ready to connect"
+//         : !deviceOnline
+//         ? "Waiting for live telemetry"
+//         : motorRunning
+//         ? "Device online | Motor ON"
+//         : "Device online | Motor OFF";
+//
+//     final triggerText = _formatTriggerType(triggerType);
 //
 //     return Container(
-//       padding: EdgeInsets.all(compact ? 15 : 18),
+//       padding: const EdgeInsets.all(18),
 //       decoration: BoxDecoration(
 //         color: AppColors.cardDark,
 //         borderRadius: BorderRadius.circular(26),
 //         border: Border.all(color: AppColors.borderDark),
+//         boxShadow: [
+//           BoxShadow(
+//             color: color.withOpacity(0.10),
+//             blurRadius: 28,
+//             offset: const Offset(0, 14),
+//           ),
+//         ],
 //       ),
 //       child: Row(
 //         children: [
 //           Container(
-//             height: compact ? 54 : 62,
-//             width: compact ? 54 : 62,
+//             height: 62,
+//             width: 62,
 //             decoration: BoxDecoration(
-//               color: snapshot.bannerColor.withOpacity(0.14),
+//               color: color.withOpacity(0.14),
 //               borderRadius: BorderRadius.circular(20),
 //             ),
 //             child: Icon(
-//               snapshot.bannerIcon,
-//               color: snapshot.bannerColor,
-//               size: compact ? 28 : 32,
+//               icon,
+//               color: color,
+//               size: 32,
 //             ),
 //           ),
+//
 //           const SizedBox(width: 14),
+//
 //           Expanded(
 //             child: Column(
 //               crossAxisAlignment: CrossAxisAlignment.start,
@@ -4407,160 +4487,93 @@
 //                   displayName,
 //                   maxLines: 1,
 //                   overflow: TextOverflow.ellipsis,
-//                   style: TextStyle(
+//                   style: const TextStyle(
 //                     color: AppColors.white,
-//                     fontSize: compact ? 15 : 17,
+//                     fontSize: 17,
 //                     fontWeight: FontWeight.w900,
 //                   ),
 //                 ),
+//
 //                 const SizedBox(height: 6),
+//
 //                 Text(
-//                   snapshot.statusName,
+//                   statusText,
+//                   style: TextStyle(
+//                     color: color,
+//                     fontSize: 14,
+//                     fontWeight: FontWeight.w800,
+//                   ),
+//                 ),
+//
+//                 // -----------------------------
+//                 // MOTOR TRIGGER TYPE
+//                 // -----------------------------
+//                 if (motorRunning && triggerType != null) ...[
+//                   const SizedBox(height: 5),
+//
+//                   Row(
+//                     children: [
+//                       Icon(
+//                         Icons.touch_app_rounded,
+//                         size: 14,
+//                         color: AppColors.white.withOpacity(0.60),
+//                       ),
+//                       const SizedBox(width: 5),
+//                       Text(
+//                         "Started by: ",
+//                         style: TextStyle(
+//                           color: AppColors.white.withOpacity(0.45),
+//                           fontSize: 11,
+//                           fontWeight: FontWeight.w700,
+//                         ),
+//                       ),
+//                       Text(
+//                         triggerText,
+//                         style: TextStyle(
+//                           color: color,
+//                           fontSize: 11,
+//                           fontWeight: FontWeight.w900,
+//                         ),
+//                       ),
+//                     ],
+//                   ),
+//                 ],
+//
+//                 const SizedBox(height: 5),
+//
+//                 Text(
+//                   hasDevice
+//                       ? (deviceId ?? "Unknown device")
+//                       : "No controller selected",
 //                   maxLines: 1,
 //                   overflow: TextOverflow.ellipsis,
 //                   style: TextStyle(
-//                     color: snapshot.bannerColor,
-//                     fontSize: compact ? 12.5 : 14,
-//                     fontWeight: FontWeight.w800,
+//                     color: AppColors.white.withOpacity(0.45),
+//                     fontSize: 11,
+//                     fontWeight: FontWeight.w700,
 //                   ),
 //                 ),
 //               ],
 //             ),
 //           ),
-//           const SizedBox(width: 10),
-//           Column(
-//             crossAxisAlignment: CrossAxisAlignment.end,
-//             children: [
-//               Text(
-//                 "Frequency",
-//                 style: TextStyle(
-//                   color: AppColors.white.withOpacity(0.62),
-//                   fontSize: compact ? 11 : 12,
-//                   fontWeight: FontWeight.w700,
-//                 ),
-//               ),
-//               const SizedBox(height: 5),
-//               Text(
-//                 frequencyText,
-//                 style: TextStyle(
-//                   color: AppColors.white,
-//                   fontSize: compact ? 19 : 23,
-//                   fontWeight: FontWeight.w900,
-//                 ),
-//               ),
-//               const SizedBox(height: 4),
-//               Text(
-//                 "Ref $referenceFrequencyText",
-//                 style: TextStyle(
-//                   color: AppColors.white.withOpacity(0.50),
-//                   fontSize: compact ? 10.5 : 12,
-//                   fontWeight: FontWeight.w700,
-//                 ),
-//               ),
-//             ],
-//           ),
 //         ],
 //       ),
 //     );
 //   }
 // }
 //
-// class DeviceNotConnectedBadge extends StatelessWidget {
-//   const DeviceNotConnectedBadge({super.key});
+// class NoDeviceProfessionalNotice extends StatelessWidget {
+//   final VoidCallback onSelectDevice;
 //
-//   @override
-//   Widget build(BuildContext context) {
-//     return const _InfoBadge(
-//       icon: Icons.link_off_rounded,
-//       color: AppColors.warning,
-//       text: "Device not connected. Select a device to view live parameters.",
-//     );
-//   }
-// }
-//
-// class WaitingTelemetryBadge extends StatelessWidget {
-//   const WaitingTelemetryBadge({super.key});
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return const _InfoBadge(
-//       icon: Icons.sync_rounded,
-//       color: AppColors.primary,
-//       text: "Device selected. Waiting for latest telemetry values.",
-//     );
-//   }
-// }
-//
-// class DeviceDisconnectedBadge extends StatelessWidget {
-//   const DeviceDisconnectedBadge({super.key});
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return const _InfoBadge(
-//       icon: Icons.wifi_off_rounded,
-//       color: AppColors.warning,
-//       text: "Device disconnected. Showing last received values when available.",
-//     );
-//   }
-// }
-//
-// class _InfoBadge extends StatelessWidget {
-//   final IconData icon;
-//   final Color color;
-//   final String text;
-//
-//   const _InfoBadge({
-//     required this.icon,
-//     required this.color,
-//     required this.text,
-//   });
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return Container(
-//       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-//       decoration: BoxDecoration(
-//         color: color.withOpacity(0.12),
-//         borderRadius: BorderRadius.circular(14),
-//         border: Border.all(color: color.withOpacity(0.3)),
-//       ),
-//       child: Row(
-//         children: [
-//           Icon(icon, color: color, size: 18),
-//           const SizedBox(width: 8),
-//           Expanded(
-//             child: Text(
-//               text,
-//               style: TextStyle(
-//                 color: AppColors.white.withOpacity(0.85),
-//                 fontWeight: FontWeight.w700,
-//                 fontSize: 12.5,
-//               ),
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }
-//
-// class StatusPanel extends StatelessWidget {
-//   final MotorSnapshot snapshot;
-//   final Animation<double> pulseAnimation;
-//
-//   const StatusPanel({
+//   const NoDeviceProfessionalNotice({
 //     super.key,
-//     required this.snapshot,
-//     required this.pulseAnimation,
+//     required this.onSelectDevice,
 //   });
 //
 //   @override
 //   Widget build(BuildContext context) {
-//     final connected =
-//         snapshot.connectionStatus == DeviceConnectionStatus.connected;
-//
 //     return Container(
-//       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+//       padding: const EdgeInsets.all(18),
 //       decoration: BoxDecoration(
 //         color: AppColors.cardDark,
 //         borderRadius: BorderRadius.circular(24),
@@ -4568,154 +4581,37 @@
 //       ),
 //       child: Row(
 //         children: [
-//           Expanded(
-//             child: StatusDot(
-//               title: "Phase",
-//               ok: connected,
-//               blinking: false,
-//               pulseAnimation: pulseAnimation,
+//           Container(
+//             height: 46,
+//             width: 46,
+//             decoration: BoxDecoration(
+//               color: AppColors.primary.withOpacity(0.10),
+//               borderRadius: BorderRadius.circular(16),
+//             ),
+//             child: const Icon(
+//               Icons.devices_other_rounded,
+//               color: AppColors.primary,
 //             ),
 //           ),
+//           const SizedBox(width: 14),
 //           Expanded(
-//             child: StatusDot(
-//               title: "Motor",
-//               ok: snapshot.isRunning,
-//               blinking: false,
-//               pulseAnimation: pulseAnimation,
-//             ),
-//           ),
-//           Expanded(
-//             child: StatusDot(
-//               title: "Trip",
-//               ok: !snapshot.hasFault,
-//               blinking: snapshot.hasFault,
-//               pulseAnimation: pulseAnimation,
-//             ),
-//           ),
-//           Expanded(
-//             child: StatusDot(
-//               title: "Service",
-//               ok: connected,
-//               blinking:
-//               snapshot.connectionStatus == DeviceConnectionStatus.disconnected,
-//               pulseAnimation: pulseAnimation,
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }
-//
-// class StatusDot extends StatelessWidget {
-//   final String title;
-//   final bool ok;
-//   final bool blinking;
-//   final Animation<double> pulseAnimation;
-//
-//   const StatusDot({
-//     super.key,
-//     required this.title,
-//     required this.ok,
-//     required this.blinking,
-//     required this.pulseAnimation,
-//   });
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     final width = MediaQuery.of(context).size.width;
-//     final dotSize = width < 360 ? 40.0 : 48.0;
-//     final baseColor = ok ? AppColors.green : AppColors.error;
-//
-//     return AnimatedBuilder(
-//       animation: pulseAnimation,
-//       builder: (context, child) {
-//         final scale = blinking ? pulseAnimation.value : 1.0;
-//
-//         return Column(
-//           children: [
-//             Transform.scale(
-//               scale: scale,
-//               child: Container(
-//                 height: dotSize,
-//                 width: dotSize,
-//                 decoration: BoxDecoration(
-//                   color: baseColor,
-//                   shape: BoxShape.circle,
-//                   boxShadow: [
-//                     BoxShadow(
-//                       color: baseColor.withOpacity(0.42),
-//                       blurRadius: blinking ? 28 : 18,
-//                       spreadRadius: blinking ? 4 : 2,
-//                     ),
-//                   ],
-//                 ),
+//             child: Text(
+//               "Select a device to enable motor control. Parameters stay empty until a controller is selected.",
+//               style: TextStyle(
+//                 color: AppColors.white.withOpacity(0.68),
+//                 fontSize: 13.5,
+//                 height: 1.4,
+//                 fontWeight: FontWeight.w700,
 //               ),
 //             ),
-//             const SizedBox(height: 8),
-//             FittedBox(
-//               child: Text(
-//                 title,
-//                 style: TextStyle(
-//                   color: AppColors.white.withOpacity(0.7),
-//                   fontSize: width < 360 ? 12 : 14,
-//                   fontWeight: FontWeight.w700,
-//                 ),
-//               ),
-//             ),
-//           ],
-//         );
-//       },
-//     );
-//   }
-// }
-//
-// class SystemBanner extends StatelessWidget {
-//   final MotorSnapshot snapshot;
-//
-//   const SystemBanner({
-//     super.key,
-//     required this.snapshot,
-//   });
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     final width = MediaQuery.of(context).size.width;
-//
-//     final text = snapshot.hasFault
-//         ? "${snapshot.faultName} Fault"
-//         : snapshot.statusName;
-//
-//     final foregroundColor =
-//     snapshot.bannerColor == AppColors.primary ? AppColors.black : AppColors.white;
-//
-//     return Container(
-//       width: double.infinity,
-//       padding: EdgeInsets.symmetric(
-//         vertical: width < 360 ? 14 : 16,
-//         horizontal: 18,
-//       ),
-//       decoration: BoxDecoration(
-//         color: snapshot.bannerColor,
-//         borderRadius: BorderRadius.circular(22),
-//       ),
-//       child: Row(
-//         mainAxisAlignment: MainAxisAlignment.center,
-//         children: [
-//           Icon(
-//             snapshot.bannerIcon,
-//             color: foregroundColor,
-//             size: width < 360 ? 24 : 27,
 //           ),
 //           const SizedBox(width: 10),
-//           Flexible(
-//             child: Text(
-//               text,
-//               overflow: TextOverflow.ellipsis,
-//               textAlign: TextAlign.center,
+//           TextButton(
+//             onPressed: onSelectDevice,
+//             child: const Text(
+//               "Select",
 //               style: TextStyle(
-//                 color: foregroundColor,
-//                 fontSize: width < 360 ? 16 : 19,
+//                 color: AppColors.primary,
 //                 fontWeight: FontWeight.w900,
 //               ),
 //             ),
@@ -4726,56 +4622,49 @@
 //   }
 // }
 //
-// class FaultAlertCard extends StatelessWidget {
-//   final MotorSnapshot snapshot;
+// class DeviceOfflineNotice extends StatelessWidget {
+//   final Future<void> Function() onRetry;
 //
-//   const FaultAlertCard({
+//   const DeviceOfflineNotice({
 //     super.key,
-//     required this.snapshot,
+//     required this.onRetry,
 //   });
 //
 //   @override
 //   Widget build(BuildContext context) {
 //     return Container(
-//       width: double.infinity,
-//       padding: const EdgeInsets.all(17),
+//       padding: const EdgeInsets.all(14),
 //       decoration: BoxDecoration(
-//         color: AppColors.error.withOpacity(0.14),
-//         borderRadius: BorderRadius.circular(22),
-//         border: Border.all(color: AppColors.error.withOpacity(0.38)),
+//         color: AppColors.warning.withOpacity(0.10),
+//         borderRadius: BorderRadius.circular(18),
+//         border: Border.all(color: AppColors.warning.withOpacity(0.24)),
 //       ),
 //       child: Row(
-//         crossAxisAlignment: CrossAxisAlignment.start,
 //         children: [
 //           const Icon(
-//             Icons.warning_amber_rounded,
-//             color: AppColors.error,
-//             size: 30,
+//             Icons.info_outline_rounded,
+//             color: AppColors.warning,
+//             size: 22,
 //           ),
-//           const SizedBox(width: 12),
+//           const SizedBox(width: 10),
 //           Expanded(
-//             child: Column(
-//               crossAxisAlignment: CrossAxisAlignment.start,
-//               children: [
-//                 Text(
-//                   snapshot.faultName,
-//                   style: const TextStyle(
-//                     color: AppColors.error,
-//                     fontSize: 18,
-//                     fontWeight: FontWeight.w900,
-//                   ),
-//                 ),
-//                 const SizedBox(height: 5),
-//                 Text(
-//                   snapshot.faultDescription,
-//                   style: TextStyle(
-//                     color: AppColors.white.withOpacity(0.78),
-//                     fontSize: 13.5,
-//                     height: 1.35,
-//                     fontWeight: FontWeight.w600,
-//                   ),
-//                 ),
-//               ],
+//             child: Text(
+//               "Device selected. Waiting for latest live reading.",
+//               style: TextStyle(
+//                 color: AppColors.white.withOpacity(0.78),
+//                 fontSize: 12.8,
+//                 fontWeight: FontWeight.w700,
+//               ),
+//             ),
+//           ),
+//           TextButton(
+//             onPressed: onRetry,
+//             child: const Text(
+//               "Retry",
+//               style: TextStyle(
+//                 color: AppColors.warning,
+//                 fontWeight: FontWeight.w900,
+//               ),
 //             ),
 //           ),
 //         ],
@@ -4784,13 +4673,58 @@
 //   }
 // }
 //
-// class CustomerNameField extends StatelessWidget {
+// class DeviceOnlineNotice extends StatelessWidget {
+//   final bool motorRunning;
+//
+//   const DeviceOnlineNotice({
+//     super.key,
+//     required this.motorRunning,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final text = motorRunning
+//         ? "Live telemetry received. Motor is running."
+//         : "Live telemetry received. Motor is stopped.";
+//
+//     return Container(
+//       padding: const EdgeInsets.all(14),
+//       decoration: BoxDecoration(
+//         color: AppColors.green.withOpacity(0.10),
+//         borderRadius: BorderRadius.circular(18),
+//         border: Border.all(color: AppColors.green.withOpacity(0.24)),
+//       ),
+//       child: Row(
+//         children: [
+//           const Icon(
+//             Icons.check_circle_rounded,
+//             color: AppColors.green,
+//             size: 22,
+//           ),
+//           const SizedBox(width: 10),
+//           Expanded(
+//             child: Text(
+//               text,
+//               style: TextStyle(
+//                 color: AppColors.white.withOpacity(0.78),
+//                 fontSize: 12.8,
+//                 fontWeight: FontWeight.w700,
+//               ),
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+//
+// class CustomerNameInputCard extends StatelessWidget {
 //   final TextEditingController controller;
 //   final FocusNode focusNode;
 //   final List<String> suggestions;
 //   final bool enabled;
 //
-//   const CustomerNameField({
+//   const CustomerNameInputCard({
 //     super.key,
 //     required this.controller,
 //     required this.focusNode,
@@ -4800,239 +4734,526 @@
 //
 //   @override
 //   Widget build(BuildContext context) {
-//     return RawAutocomplete<String>(
-//       textEditingController: controller,
-//       focusNode: focusNode,
-//       optionsBuilder: (TextEditingValue value) {
-//         if (!enabled) return const Iterable<String>.empty();
-//
-//         final input = value.text.trim().toLowerCase();
-//         if (input.isEmpty) return const Iterable<String>.empty();
-//
-//         return suggestions.where(
-//               (name) => name.toLowerCase().contains(input),
-//         );
-//       },
-//       onSelected: (String value) {
-//         controller.text = value;
-//         controller.selection = TextSelection.fromPosition(
-//           TextPosition(offset: controller.text.length),
-//         );
-//       },
-//       fieldViewBuilder: (
-//           context,
-//           textEditingController,
-//           fieldFocusNode,
-//           onFieldSubmitted,
-//           ) {
-//         return Container(
-//           decoration: BoxDecoration(
-//             color: AppColors.cardDark,
-//             borderRadius: BorderRadius.circular(22),
-//             border: Border.all(color: AppColors.borderDark),
+//     return Column(
+//       crossAxisAlignment: CrossAxisAlignment.start,
+//       children: [
+//         Padding(
+//           padding: const EdgeInsets.only(left: 4, bottom: 9),
+//           child: Row(
+//             children: [
+//               Icon(
+//                 Icons.account_circle_outlined,
+//                 size: 17,
+//                 color: AppColors.white.withOpacity(0.48),
+//               ),
+//               const SizedBox(width: 7),
+//               Text(
+//                 "CUSTOMER / KHATA",
+//                 style: TextStyle(
+//                   color: AppColors.white.withOpacity(0.56),
+//                   fontSize: 11,
+//                   letterSpacing: 1.1,
+//                   fontWeight: FontWeight.w900,
+//                 ),
+//               ),
+//             ],
 //           ),
-//           child: TextField(
-//             enabled: enabled,
-//             controller: textEditingController,
-//             focusNode: fieldFocusNode,
-//             style: const TextStyle(
-//               color: AppColors.white,
-//               fontWeight: FontWeight.w700,
-//             ),
-//             decoration: InputDecoration(
-//               hintText:
-//               enabled ? "Customer name for Khata" : "Select a device first",
-//               hintStyle: TextStyle(
-//                 color: AppColors.white.withOpacity(0.42),
-//               ),
-//               prefixIcon: Icon(
-//                 enabled
-//                     ? Icons.person_outline_rounded
-//                     : Icons.lock_outline_rounded,
-//                 color: AppColors.primary,
-//               ),
-//               border: InputBorder.none,
-//               contentPadding: const EdgeInsets.symmetric(
-//                 horizontal: 18,
-//                 vertical: 18,
-//               ),
-//             ),
-//           ),
-//         );
-//       },
-//       optionsViewBuilder: (context, onSelected, options) {
-//         return Align(
-//           alignment: Alignment.topLeft,
-//           child: Material(
-//             color: Colors.transparent,
-//             child: Container(
-//               width: MediaQuery.of(context).size.width - 36,
-//               constraints: const BoxConstraints(
-//                 maxHeight: 240,
-//                 maxWidth: 560,
-//               ),
-//               margin: const EdgeInsets.only(top: 8),
+//         ),
+//         RawAutocomplete<String>(
+//           textEditingController: controller,
+//           focusNode: focusNode,
+//           optionsBuilder: (TextEditingValue value) {
+//             if (!enabled) return const Iterable<String>.empty();
+//
+//             final input = value.text.trim().toLowerCase();
+//
+//             if (input.isEmpty) {
+//               return suggestions.take(8);
+//             }
+//
+//             final startsWith = <String>[];
+//             final contains = <String>[];
+//
+//             for (final name in suggestions) {
+//               final lower = name.toLowerCase();
+//               if (lower.startsWith(input)) {
+//                 startsWith.add(name);
+//               } else if (lower.contains(input)) {
+//                 contains.add(name);
+//               }
+//             }
+//
+//             return [...startsWith, ...contains].take(8);
+//           },
+//           onSelected: (String value) {
+//             controller.text = value;
+//             controller.selection = TextSelection.collapsed(
+//               offset: controller.text.length,
+//             );
+//           },
+//           fieldViewBuilder: (
+//               context,
+//               textEditingController,
+//               fieldFocusNode,
+//               onFieldSubmitted,
+//               ) {
+//             return AnimatedContainer(
+//               duration: const Duration(milliseconds: 180),
 //               decoration: BoxDecoration(
 //                 color: AppColors.cardDark,
-//                 borderRadius: BorderRadius.circular(18),
-//                 border: Border.all(color: AppColors.borderDark),
+//                 borderRadius: BorderRadius.circular(20),
+//                 border: Border.all(
+//                   color: fieldFocusNode.hasFocus
+//                       ? AppColors.primary.withOpacity(0.70)
+//                       : AppColors.borderDark,
+//                 ),
+//                 boxShadow: [
+//                   BoxShadow(
+//                     color: Colors.black.withOpacity(0.16),
+//                     blurRadius: 16,
+//                     offset: const Offset(0, 8),
+//                   ),
+//                 ],
 //               ),
-//               child: ListView.separated(
-//                 padding: const EdgeInsets.symmetric(vertical: 6),
-//                 shrinkWrap: true,
-//                 itemCount: options.length,
-//                 separatorBuilder: (_, __) {
-//                   return Divider(
-//                     height: 1,
-//                     color: AppColors.white.withOpacity(0.06),
-//                   );
-//                 },
-//                 itemBuilder: (context, index) {
-//                   final option = options.elementAt(index);
+//               child: TextField(
+//                 enabled: enabled,
+//                 controller: textEditingController,
+//                 focusNode: fieldFocusNode,
+//                 keyboardType: TextInputType.name,
+//                 textCapitalization: TextCapitalization.words,
+//                 autocorrect: false,
+//                 style: const TextStyle(
+//                   color: AppColors.white,
+//                   fontSize: 15.5,
+//                   fontWeight: FontWeight.w800,
+//                 ),
+//                 textInputAction: TextInputAction.done,
+//                 decoration: InputDecoration(
+//                   hintText: enabled
+//                       ? "Enter new or previous customer"
+//                       : "Device must be online first",
+//                   hintStyle: TextStyle(
+//                     color: AppColors.white.withOpacity(0.38),
+//                     fontWeight: FontWeight.w600,
+//                   ),
+//                   prefixIcon: Icon(
+//                     enabled
+//                         ? Icons.person_search_rounded
+//                         : Icons.lock_outline_rounded,
+//                     color: AppColors.primary,
+//                   ),
+//                   suffixIcon: enabled && suggestions.isNotEmpty
+//                       ? Tooltip(
+//                     message: "Previous customers available",
+//                     child: Icon(
+//                       Icons.history_rounded,
+//                       color: AppColors.white.withOpacity(0.38),
+//                     ),
+//                   )
+//                       : null,
+//                   border: InputBorder.none,
+//                   contentPadding: const EdgeInsets.symmetric(
+//                     horizontal: 18,
+//                     vertical: 18,
+//                   ),
+//                 ),
+//               ),
+//             );
+//           },
+//           optionsViewBuilder: (context, onSelected, options) {
+//             final optionList = options.toList();
 //
-//                   return ListTile(
-//                     dense: true,
-//                     leading: const Icon(
-//                       Icons.person_rounded,
-//                       color: AppColors.primary,
-//                     ),
-//                     title: Text(
-//                       option,
-//                       style: const TextStyle(
-//                         color: AppColors.white,
-//                         fontWeight: FontWeight.w800,
+//             return Align(
+//               alignment: Alignment.topLeft,
+//               child: Material(
+//                 color: Colors.transparent,
+//                 child: Container(
+//                   width: MediaQuery.of(context).size.width - 36,
+//                   constraints: const BoxConstraints(
+//                     maxHeight: 290,
+//                     maxWidth: 560,
+//                   ),
+//                   margin: const EdgeInsets.only(top: 8),
+//                   decoration: BoxDecoration(
+//                     color: AppColors.cardDark,
+//                     borderRadius: BorderRadius.circular(18),
+//                     border: Border.all(color: AppColors.borderDark),
+//                     boxShadow: [
+//                       BoxShadow(
+//                         color: Colors.black.withOpacity(0.28),
+//                         blurRadius: 24,
+//                         offset: const Offset(0, 12),
 //                       ),
-//                     ),
-//                     onTap: () => onSelected(option),
-//                   );
-//                 },
+//                     ],
+//                   ),
+//                   child: Column(
+//                     mainAxisSize: MainAxisSize.min,
+//                     crossAxisAlignment: CrossAxisAlignment.start,
+//                     children: [
+//                       Padding(
+//                         padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+//                         child: Row(
+//                           children: [
+//                             const Icon(
+//                               Icons.history_rounded,
+//                               color: AppColors.primary,
+//                               size: 18,
+//                             ),
+//                             const SizedBox(width: 8),
+//                             Text(
+//                               "Previous customers",
+//                               style: TextStyle(
+//                                 color: AppColors.white.withOpacity(0.62),
+//                                 fontSize: 12,
+//                                 fontWeight: FontWeight.w900,
+//                               ),
+//                             ),
+//                           ],
+//                         ),
+//                       ),
+//                       Flexible(
+//                         child: ListView.separated(
+//                           padding: const EdgeInsets.only(bottom: 7),
+//                           shrinkWrap: true,
+//                           itemCount: optionList.length,
+//                           separatorBuilder: (_, __) => Divider(
+//                             height: 1,
+//                             color: AppColors.white.withOpacity(0.06),
+//                           ),
+//                           itemBuilder: (context, index) {
+//                             final option = optionList[index];
+//
+//                             return ListTile(
+//                               dense: true,
+//                               leading: Container(
+//                                 height: 34,
+//                                 width: 34,
+//                                 alignment: Alignment.center,
+//                                 decoration: BoxDecoration(
+//                                   color: AppColors.primary.withOpacity(0.10),
+//                                   shape: BoxShape.circle,
+//                                 ),
+//                                 child: const Icon(
+//                                   Icons.person_rounded,
+//                                   color: AppColors.primary,
+//                                   size: 18,
+//                                 ),
+//                               ),
+//                               title: Text(
+//                                 option,
+//                                 style: const TextStyle(
+//                                   color: AppColors.white,
+//                                   fontWeight: FontWeight.w800,
+//                                 ),
+//                               ),
+//                               trailing: Icon(
+//                                 Icons.north_west_rounded,
+//                                 size: 17,
+//                                 color: AppColors.white.withOpacity(0.30),
+//                               ),
+//                               onTap: () => onSelected(option),
+//                             );
+//                           },
+//                         ),
+//                       ),
+//                     ],
+//                   ),
+//                 ),
+//               ),
+//             );
+//           },
+//         ),
+//         if (enabled)
+//           Padding(
+//             padding: const EdgeInsets.only(left: 5, top: 8),
+//             child: Text(
+//               suggestions.isEmpty
+//                   ? "New customer names will appear here next time."
+//                   : "Type to search, or select a previously used customer.",
+//               style: TextStyle(
+//                 color: AppColors.white.withOpacity(0.38),
+//                 fontSize: 11.5,
+//                 fontWeight: FontWeight.w600,
 //               ),
 //             ),
 //           ),
-//         );
-//       },
+//       ],
 //     );
 //   }
 // }
-// class MotorButton extends StatelessWidget {
-//   final MotorSnapshot snapshot;
+//
+// class MotorCommandButton extends StatelessWidget {
+//   final bool hasDevice;
+//   final bool deviceOnline;
+//   final bool isOn;
 //   final bool loading;
 //   final double size;
 //
-//   const MotorButton({
+//   const MotorCommandButton({
 //     super.key,
-//     required this.snapshot,
+//     required this.hasDevice,
+//     required this.deviceOnline,
+//     required this.isOn,
 //     required this.loading,
 //     required this.size,
 //   });
 //
-//   bool get canControl {
-//     return snapshot.connectionStatus == DeviceConnectionStatus.connected &&
-//         !snapshot.hasFault;
-//   }
-//
 //   @override
 //   Widget build(BuildContext context) {
-//     final activeColor = !canControl
+//     final activeColor = !hasDevice
+//         ? AppColors.primary
+//         : !deviceOnline
 //         ? AppColors.warning
-//         : snapshot.isRunning
+//         : isOn
 //         ? AppColors.green
 //         : AppColors.error;
 //
-//     final label = snapshot.connectionStatus == DeviceConnectionStatus.noDevice
-//         ? "N/A"
-//         : snapshot.connectionStatus == DeviceConnectionStatus.waitingTelemetry
+//     final label = !hasDevice
+//         ? "SELECT"
+//         : !deviceOnline
 //         ? "WAIT"
-//         : snapshot.connectionStatus == DeviceConnectionStatus.disconnected
-//         ? "OFFLINE"
-//         : snapshot.hasFault
-//         ? "FAULT"
-//         : snapshot.isRunning
+//         : isOn
 //         ? "ON"
 //         : "OFF";
 //
-//     return Opacity(
-//       opacity: canControl ? 1.0 : 0.55,
-//       child: AnimatedContainer(
-//         duration: const Duration(milliseconds: 300),
-//         width: size,
-//         height: size,
-//         alignment: Alignment.center,
-//         decoration: BoxDecoration(
-//           shape: BoxShape.circle,
-//           gradient: LinearGradient(
-//             begin: Alignment.topLeft,
-//             end: Alignment.bottomRight,
-//             colors: [
-//               activeColor,
-//               activeColor.withOpacity(0.72),
-//             ],
+//     final icon = !hasDevice
+//         ? Icons.devices_other_rounded
+//         : !deviceOnline
+//         ? Icons.wifi_tethering_error_rounded
+//         : isOn
+//         ? Icons.power_settings_new_rounded
+//         : Icons.power_off_rounded;
+//
+//     final textColor = !hasDevice ? AppColors.black : AppColors.white;
+//
+//     return AnimatedContainer(
+//       duration: const Duration(milliseconds: 300),
+//       width: size,
+//       height: size,
+//       alignment: Alignment.center,
+//       decoration: BoxDecoration(
+//         shape: BoxShape.circle,
+//         gradient: LinearGradient(
+//           begin: Alignment.topLeft,
+//           end: Alignment.bottomRight,
+//           colors: [
+//             activeColor,
+//             activeColor.withOpacity(0.72),
+//           ],
+//         ),
+//         boxShadow: [
+//           BoxShadow(
+//             color: activeColor.withOpacity(0.30),
+//             blurRadius: 34,
+//             offset: const Offset(0, 16),
 //           ),
-//           boxShadow: [
-//             BoxShadow(
-//               color: activeColor.withOpacity(canControl ? 0.34 : 0.16),
-//               blurRadius: canControl ? 34 : 18,
-//               offset: const Offset(0, 16),
-//             ),
-//           ],
-//         ),
-//         child: loading
-//             ? const CircularProgressIndicator(color: AppColors.white)
-//             : Column(
-//           mainAxisAlignment: MainAxisAlignment.center,
-//           children: [
-//             Icon(
-//               snapshot.bannerIcon,
-//               color: AppColors.white,
-//               size: size < 190 ? 36 : 42,
-//             ),
-//             const SizedBox(height: 8),
-//             FittedBox(
-//               child: Text(
-//                 label,
-//                 style: TextStyle(
-//                   color: AppColors.white,
-//                   fontSize: label == "OFFLINE"
-//                       ? 22
-//                       : label == "WAIT"
-//                       ? 24
-//                       : size < 190
-//                       ? 26
-//                       : 36,
-//                   fontWeight: FontWeight.w900,
-//                 ),
+//         ],
+//       ),
+//       child: loading
+//           ? const CircularProgressIndicator(color: AppColors.white)
+//           : Column(
+//         mainAxisAlignment: MainAxisAlignment.center,
+//         children: [
+//           Icon(
+//             icon,
+//             color: textColor,
+//             size: size < 190 ? 36 : 42,
+//           ),
+//           const SizedBox(height: 8),
+//           FittedBox(
+//             child: Text(
+//               label,
+//               style: TextStyle(
+//                 color: textColor,
+//                 fontSize: label == "SELECT"
+//                     ? 24
+//                     : label == "WAIT"
+//                     ? 24
+//                     : size < 190
+//                     ? 26
+//                     : 36,
+//                 fontWeight: FontWeight.w900,
 //               ),
 //             ),
-//             if (!canControl) ...[
-//               const SizedBox(height: 5),
-//               Text(
-//                 "Disabled",
-//                 style: TextStyle(
-//                   color: AppColors.white.withOpacity(0.85),
-//                   fontSize: 11,
-//                   fontWeight: FontWeight.w700,
-//                 ),
-//               ),
-//             ],
-//           ],
-//         ),
+//           ),
+//         ],
 //       ),
 //     );
 //   }
 // }
 //
-// class MetricCard extends StatelessWidget {
+// class MotorRunStatusCard extends StatelessWidget {
+//   final bool hasDevice;
+//   final bool deviceOnline;
+//   final bool isOn;
+//   final bool waitingForVfd;
+//   final String runningTime;
+//
+//   const MotorRunStatusCard({
+//     super.key,
+//     required this.hasDevice,
+//     required this.deviceOnline,
+//     required this.isOn,
+//     required this.waitingForVfd,
+//     required this.runningTime,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final active = hasDevice && deviceOnline && isOn;
+//
+//     final title = !hasDevice
+//         ? "NO DEVICE"
+//         : !deviceOnline
+//         ? "WAITING FOR DEVICE"
+//         : waitingForVfd
+//         ? "SYNCING WITH VFD"
+//         : active
+//         ? "MOTOR RUN TIME"
+//         : "MOTOR STOPPED";
+//
+//     final subtitle = !hasDevice
+//         ? "Select a controller to start monitoring"
+//         : !deviceOnline
+//         ? "Waiting for fresh live telemetry"
+//         : waitingForVfd
+//         ? "Waiting for the VFD to confirm the command"
+//         : active
+//         ? "Elapsed time since this motor run started"
+//         : "Timer starts only after VFD confirms ON";
+//
+//     final accent = active ? AppColors.green : AppColors.primary;
+//
+//     return Container(
+//       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+//       decoration: BoxDecoration(
+//         color: AppColors.cardDark,
+//         borderRadius: BorderRadius.circular(20),
+//         border: Border.all(
+//           color: active
+//               ? AppColors.green.withOpacity(0.28)
+//               : AppColors.borderDark,
+//         ),
+//       ),
+//       child: Row(
+//         children: [
+//           Container(
+//             height: 44,
+//             width: 44,
+//             alignment: Alignment.center,
+//             decoration: BoxDecoration(
+//               color: accent.withOpacity(0.11),
+//               borderRadius: BorderRadius.circular(14),
+//             ),
+//             child: waitingForVfd
+//                 ? SizedBox(
+//               height: 21,
+//               width: 21,
+//               child: CircularProgressIndicator(
+//                 strokeWidth: 2.4,
+//                 color: accent,
+//               ),
+//             )
+//                 : Icon(
+//               active ? Icons.timer_rounded : Icons.timer_off_outlined,
+//               color: accent,
+//               size: 23,
+//             ),
+//           ),
+//           const SizedBox(width: 13),
+//           Expanded(
+//             child: Column(
+//               crossAxisAlignment: CrossAxisAlignment.start,
+//               children: [
+//                 Text(
+//                   title,
+//                   style: TextStyle(
+//                     color: AppColors.white.withOpacity(0.54),
+//                     fontSize: 10.5,
+//                     letterSpacing: 0.9,
+//                     fontWeight: FontWeight.w900,
+//                   ),
+//                 ),
+//                 const SizedBox(height: 4),
+//                 Text(
+//                   subtitle,
+//                   maxLines: 2,
+//                   overflow: TextOverflow.ellipsis,
+//                   style: TextStyle(
+//                     color: AppColors.white.withOpacity(0.60),
+//                     fontSize: 11.8,
+//                     fontWeight: FontWeight.w600,
+//                   ),
+//                 ),
+//               ],
+//             ),
+//           ),
+//           const SizedBox(width: 12),
+//           Text(
+//             active ? runningTime : "00:00:00",
+//             style: TextStyle(
+//               color: active
+//                   ? AppColors.green
+//                   : AppColors.white.withOpacity(0.42),
+//               fontSize: 20,
+//               fontWeight: FontWeight.w900,
+//               fontFeatures: const [FontFeature.tabularFigures()],
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+//
+// class ParameterMetric {
 //   final IconData icon;
 //   final String title;
 //   final String value;
 //   final bool highlight;
 //
-//   const MetricCard({
-//     super.key,
+//   const ParameterMetric({
 //     required this.icon,
 //     required this.title,
 //     required this.value,
 //     this.highlight = false,
+//   });
+// }
+//
+// class ParameterGridSection extends StatelessWidget {
+//   final int crossAxisCount;
+//   final double childAspectRatio;
+//   final List<ParameterMetric> metrics;
+//
+//   const ParameterGridSection({
+//     super.key,
+//     required this.crossAxisCount,
+//     required this.childAspectRatio,
+//     required this.metrics,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return GridView.count(
+//       shrinkWrap: true,
+//       physics: const NeverScrollableScrollPhysics(),
+//       crossAxisCount: crossAxisCount,
+//       crossAxisSpacing: 14,
+//       mainAxisSpacing: 14,
+//       childAspectRatio: childAspectRatio,
+//       children: metrics.map((metric) {
+//         return ParameterMetricCard(metric: metric);
+//       }).toList(),
+//     );
+//   }
+// }
+//
+// class ParameterMetricCard extends StatelessWidget {
+//   final ParameterMetric metric;
+//
+//   const ParameterMetricCard({
+//     super.key,
+//     required this.metric,
 //   });
 //
 //   @override
@@ -5046,22 +5267,31 @@
 //         color: AppColors.cardDark,
 //         borderRadius: BorderRadius.circular(22),
 //         border: Border.all(
-//           color: highlight
+//           color: metric.highlight
 //               ? AppColors.primary.withOpacity(0.38)
 //               : AppColors.borderDark,
 //         ),
+//         boxShadow: [
+//           BoxShadow(
+//             color: Colors.black.withOpacity(0.20),
+//             blurRadius: 18,
+//             offset: const Offset(0, 9),
+//           ),
+//         ],
 //       ),
 //       child: Column(
 //         crossAxisAlignment: CrossAxisAlignment.start,
 //         children: [
 //           Icon(
-//             icon,
-//             color: highlight ? AppColors.primary : AppColors.iconInactiveDark,
+//             metric.icon,
+//             color: metric.highlight
+//                 ? AppColors.primary
+//                 : AppColors.white.withOpacity(0.45),
 //             size: compact ? 24 : 28,
 //           ),
 //           const Spacer(),
 //           Text(
-//             title,
+//             metric.title,
 //             maxLines: 1,
 //             overflow: TextOverflow.ellipsis,
 //             style: TextStyle(
@@ -5075,7 +5305,2086 @@
 //             alignment: Alignment.centerLeft,
 //             fit: BoxFit.scaleDown,
 //             child: Text(
-//               value,
+//               metric.value,
+//               style: TextStyle(
+//                 color: AppColors.white,
+//                 height: 1.25,
+//                 fontSize: compact ? 17 : 20,
+//                 fontWeight: FontWeight.w900,
+//               ),
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+// import "dart:async";
+// import "dart:ui" show FontFeature;
+//
+// import "package:flutter/material.dart";
+// import "package:flutter/services.dart";
+// import "package:flutter_riverpod/flutter_riverpod.dart";
+//
+// import "package:smart_iot_app/src/core/constant/app_color.dart";
+// import "package:smart_iot_app/src/features/khata/data/models/khata_entry_model.dart";
+// import "package:smart_iot_app/src/features/widget/custom_drawer.dart";
+//
+// import "../../../../app/routes.dart";
+// import "../../../khata/presentation/providers/ khata_providers.dart";
+// import "../../../motor/presentation/ providers/motor_providers.dart";
+// import "../../../telemetry/presentation/providers/telemetry_providers.dart";
+//
+// class HomeScreen extends ConsumerStatefulWidget {
+//   final String? deviceId;
+//
+//   const HomeScreen({
+//     super.key,
+//     this.deviceId,
+//   });
+//
+//   @override
+//   ConsumerState<HomeScreen> createState() => _HomeScreenState();
+// }
+//
+// class _HomeScreenState extends ConsumerState<HomeScreen>
+//     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+//   late AnimationController pulseController;
+//   late Animation<double> pulseAnimation;
+//
+//   final TextEditingController customerNameController = TextEditingController();
+//   final FocusNode customerNameFocusNode = FocusNode();
+//
+//   KhataEntryModel? activeKhataEntry;
+//   String? activeTriggerType;
+//
+//   Timer? telemetryTimer;
+//   Timer? runTimer;
+//
+//   int runSeconds = 0;
+//   DateTime? motorStartedAt;
+//
+//   String? userId;
+//   String? deviceId;
+//   String? deviceName;
+//
+//   bool didSetupDevice = false;
+//   bool isTelemetryLoading = false;
+//   bool firstTelemetryLoaded = false;
+//
+//   // Prevents the UI from starting a brand-new timer before we have checked
+//   // whether an existing open Khata session already has the real start time.
+//   bool didRestoreMotorSession = false;
+//   bool isRestoringMotorSession = false;
+//
+//   // Keeps the motor button in loading state until VFD telemetry confirms
+//   // the requested ON/OFF state.
+//   bool isWaitingForVfdConfirmation = false;
+//
+//   // While a command is pending, keep showing the last confirmed state.
+//   // This prevents ON -> OFF -> ON / OFF -> ON -> OFF visual flicker.
+//   bool? motorStateBeforePendingCommand;
+//
+//   bool get hasDevice => deviceId != null && deviceId!.trim().isNotEmpty;
+//
+//   @override
+//   void initState() {
+//     super.initState();
+//     WidgetsBinding.instance.addObserver(this);
+//
+//     pulseController = AnimationController(
+//       vsync: this,
+//       duration: const Duration(milliseconds: 850),
+//     )..repeat(reverse: true);
+//
+//     pulseAnimation = Tween<double>(begin: 0.82, end: 1.12).animate(
+//       CurvedAnimation(parent: pulseController, curve: Curves.easeInOut),
+//     );
+//   }
+//
+//   @override
+//   void didChangeAppLifecycleState(AppLifecycleState state) {
+//     if (state == AppLifecycleState.resumed) {
+//       _refreshRunSeconds();
+//
+//       if (hasDevice) {
+//         Future.microtask(() async {
+//           await loadTelemetry(showError: false);
+//           await ref.read(khataViewModelProvider.notifier).loadEntries();
+//           await _restoreMotorSessionFromKhata();
+//         });
+//       }
+//     }
+//   }
+//
+//   @override
+//   void didChangeDependencies() {
+//     super.didChangeDependencies();
+//
+//     if (didSetupDevice) return;
+//     didSetupDevice = true;
+//
+//     final args = ModalRoute.of(context)?.settings.arguments;
+//
+//     if (args is Map) {
+//       userId = args["userId"]?.toString();
+//
+//       final rawDeviceId = args["deviceId"]?.toString().trim();
+//       if (rawDeviceId != null && rawDeviceId.isNotEmpty) {
+//         deviceId = rawDeviceId;
+//       }
+//
+//       final rawDeviceName = args["deviceName"]?.toString().trim();
+//       if (rawDeviceName != null && rawDeviceName.isNotEmpty) {
+//         deviceName = rawDeviceName;
+//       }
+//     }
+//
+//     final widgetDeviceId = widget.deviceId?.trim();
+//
+//     if (!hasDevice && widgetDeviceId != null && widgetDeviceId.isNotEmpty) {
+//       deviceId = widgetDeviceId;
+//     }
+//
+//     if (hasDevice) {
+//       Future.microtask(() async {
+//         await loadTelemetry();
+//         await ref.read(khataViewModelProvider.notifier).loadEntries();
+//         await _restoreMotorSessionFromKhata();
+//       });
+//
+//       telemetryTimer?.cancel();
+//       telemetryTimer = Timer.periodic(
+//         const Duration(seconds: 5),
+//             (_) => loadTelemetry(showError: false),
+//       );
+//     }
+//   }
+//
+//   @override
+//   void dispose() {
+//     WidgetsBinding.instance.removeObserver(this);
+//     pulseController.dispose();
+//     customerNameController.dispose();
+//     customerNameFocusNode.dispose();
+//     telemetryTimer?.cancel();
+//     runTimer?.cancel();
+//     super.dispose();
+//   }
+//
+//   int _toInt(dynamic value) {
+//     if (value == null) return 0;
+//     if (value is int) return value;
+//     if (value is double) return value.toInt();
+//     if (value is num) return value.toInt();
+//     return int.tryParse(value.toString()) ?? 0;
+//   }
+//
+//   bool isDeviceOnline(dynamic latest) {
+//     if (!hasDevice) return false;
+//     if (latest == null) return false;
+//
+//     final live = _toInt(latest.isLive) == 1;
+//     final fresh = latest.isFresh(withinSeconds: 20);
+//
+//     return live && fresh;
+//   }
+//
+//
+//   bool isMotorRunning(dynamic latest) {
+//     if (!hasDevice) return false;
+//     if (!isDeviceOnline(latest)) return false;
+//
+//     final statusCode = _toInt(latest.statusCode);
+//
+//     return statusCode == 1 || statusCode == 2;
+//   }
+//
+//   Future<void> loadTelemetry({bool showError = false}) async {
+//     if (!hasDevice) return;
+//     if (isTelemetryLoading) return;
+//
+//     final isFirstLoad = !firstTelemetryLoaded;
+//
+//     isTelemetryLoading = true;
+//
+//     try {
+//       await ref.read(telemetryViewModelProvider.notifier).loadLatest(
+//         deviceId!,
+//         showLoading: isFirstLoad,
+//       );
+//     } catch (e) {
+//       if (showError) {
+//         showMessage(
+//           "Telemetry failed: ${friendlyError(e.toString())}",
+//           true,
+//           seconds: 8,
+//         );
+//       }
+//     } finally {
+//       isTelemetryLoading = false;
+//
+//       if (mounted && isFirstLoad) {
+//         setState(() {
+//           firstTelemetryLoaded = true;
+//         });
+//       }
+//     }
+//   }
+//
+//   Future<bool> _waitForVfdConfirmation({
+//     required bool expectedOn,
+//     required int telemetryTimestampBeforeCommand,
+//   }) async {
+//     final deadline = DateTime.now().add(
+//       const Duration(seconds: 20),
+//     );
+//
+//     int lastCheckedTimestamp = telemetryTimestampBeforeCommand;
+//
+//     while (mounted && DateTime.now().isBefore(deadline)) {
+//       await loadTelemetry(showError: false);
+//
+//       if (!mounted) return false;
+//
+//       final latest = ref.read(telemetryViewModelProvider).latest;
+//
+//       if (!isDeviceOnline(latest)) {
+//         await Future.delayed(
+//           const Duration(milliseconds: 400),
+//         );
+//         continue;
+//       }
+//
+//       final telemetryTimestamp = _toInt(latest?.timestamp);
+//
+//       // Old telemetry ko confirmation ke liye use nahi karna.
+//       if (telemetryTimestamp <= telemetryTimestampBeforeCommand ||
+//           telemetryTimestamp <= lastCheckedTimestamp) {
+//         await Future.delayed(
+//           const Duration(milliseconds: 400),
+//         );
+//         continue;
+//       }
+//
+//       lastCheckedTimestamp = telemetryTimestamp;
+//
+//       final confirmedMotorState = isMotorRunning(latest);
+//
+//       // First NEW VFD response is enough.
+//       if (confirmedMotorState == expectedOn) {
+//         return true;
+//       }
+//
+//       await Future.delayed(
+//         const Duration(milliseconds: 400),
+//       );
+//     }
+//
+//     return false;
+//   }
+//
+//   KhataEntryModel? _latestOpenKhataForCurrentDevice() {
+//     if (!hasDevice) return null;
+//
+//     final entries = ref.read(khataViewModelProvider).entries;
+//
+//     KhataEntryModel? latestOpen;
+//
+//     for (final entry in entries) {
+//       if (entry.deviceId.trim() != deviceId!.trim()) continue;
+//       if (!entry.isOpen) continue;
+//       if (entry.startTime == null) continue;
+//       if (entry.endTime != null) continue;
+//
+//       if (latestOpen == null ||
+//           entry.startTime!.isAfter(latestOpen.startTime!)) {
+//         latestOpen = entry;
+//       }
+//     }
+//
+//     return latestOpen;
+//   }
+//
+//   Future<void> _restoreMotorSessionFromKhata() async {
+//     if (!hasDevice || isRestoringMotorSession) return;
+//
+//     isRestoringMotorSession = true;
+//
+//     try {
+//       final restoredEntry = _latestOpenKhataForCurrentDevice();
+//       final latest = ref.read(telemetryViewModelProvider).latest;
+//
+//       final hasFreshTelemetry = isDeviceOnline(latest);
+//       final vfdSaysRunning =
+//       hasFreshTelemetry ? isMotorRunning(latest) : false;
+//
+//       if (restoredEntry != null) {
+//         activeKhataEntry = restoredEntry;
+//
+//         final restoredCustomer = (restoredEntry.customerName ?? "").trim();
+//         if (restoredCustomer.isNotEmpty &&
+//             customerNameController.text.trim().isEmpty) {
+//           customerNameController.text = restoredCustomer;
+//           customerNameController.selection = TextSelection.collapsed(
+//             offset: customerNameController.text.length,
+//           );
+//         }
+//
+//         // An open backend session is authoritative for elapsed time.
+//         // Even if the app was killed or the phone slept, elapsed time is
+//         // recalculated from this original timestamp instead of counting ticks.
+//         _startLocalTimer(startedAt: restoredEntry.startTime);
+//       } else {
+//         activeKhataEntry = null;
+//
+//         // If VFD is already running but there is no open app/Khata session,
+//         // we cannot invent an old start time. Start a local fallback from now.
+//         // A later backend/open-session refresh can replace this with the
+//         // authoritative timestamp.
+//         if (vfdSaysRunning && motorStartedAt == null) {
+//           _startLocalTimer(startedAt: DateTime.now());
+//         }
+//       }
+//
+//       // Fresh OFF telemetry means there is no running motor to display.
+//       // Do not let an old/stale timer survive a confirmed OFF state.
+//       if (hasFreshTelemetry && !vfdSaysRunning) {
+//         _stopLocalTimer();
+//
+//         if (mounted && runSeconds != 0) {
+//           setState(() {
+//             runSeconds = 0;
+//           });
+//         } else {
+//           runSeconds = 0;
+//         }
+//       }
+//     } finally {
+//       isRestoringMotorSession = false;
+//
+//       if (mounted) {
+//         setState(() {
+//           didRestoreMotorSession = true;
+//         });
+//       } else {
+//         didRestoreMotorSession = true;
+//       }
+//     }
+//   }
+//
+//   void _startLocalTimer({DateTime? startedAt}) {
+//     if (startedAt != null) {
+//       motorStartedAt = startedAt;
+//     } else {
+//       motorStartedAt ??= DateTime.now();
+//     }
+//
+//     runTimer?.cancel();
+//     _refreshRunSeconds();
+//
+//     runTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+//       _refreshRunSeconds();
+//     });
+//   }
+//
+//   void _refreshRunSeconds() {
+//     final startedAt = motorStartedAt;
+//     if (!mounted || startedAt == null) return;
+//
+//     final elapsed = DateTime.now().difference(startedAt).inSeconds;
+//     final safeElapsed = elapsed < 0 ? 0 : elapsed;
+//
+//     if (safeElapsed != runSeconds) {
+//       setState(() {
+//         runSeconds = safeElapsed;
+//       });
+//     }
+//   }
+//
+//   void _stopLocalTimer({bool resetStart = true}) {
+//     runTimer?.cancel();
+//     runTimer = null;
+//
+//     if (resetStart) {
+//       motorStartedAt = null;
+//     }
+//   }
+//
+//   String get runningTime {
+//     final seconds = runSeconds < 0 ? 0 : runSeconds;
+//     final h = (seconds ~/ 3600).toString().padLeft(2, "0");
+//     final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, "0");
+//     final s = (seconds % 60).toString().padLeft(2, "0");
+//     return "$h:$m:$s";
+//   }
+//
+//   String friendlyError(String? error) {
+//     final text = (error ?? "").toLowerCase();
+//
+//     if (text.contains("socket") ||
+//         text.contains("connection") ||
+//         text.contains("network") ||
+//         text.contains("internet") ||
+//         text.contains("host lookup") ||
+//         text.contains("timeout") ||
+//         text.contains("receive timeout") ||
+//         text.contains("connection refused")) {
+//       return "No internet connection. Please check Wi-Fi or mobile data.";
+//     }
+//
+//     if (text.trim().isEmpty) return "Unable to connect. Please try again.";
+//
+//     return error!;
+//   }
+//
+//   String formatValue(
+//       double? value,
+//       String unit, {
+//         int decimals = 1,
+//       }) {
+//     if (!hasDevice) return "-- $unit";
+//     if (value == null) return "-- $unit";
+//     return "${value.toStringAsFixed(decimals)} $unit";
+//   }
+//
+//   Future<void> toggleMotor() async {
+//     if (!hasDevice) {
+//       showMessage("Please select a device first.", true);
+//       return;
+//     }
+//
+//     final latest = ref.read(telemetryViewModelProvider).latest;
+//
+//     final deviceOnline = isDeviceOnline(latest);
+//     final motorRunning = isMotorRunning(latest);
+//     final telemetryTimestampBeforeCommand = _toInt(latest?.timestamp);
+//
+//     if (!deviceOnline) {
+//       showMessage(
+//         "Device is offline. Wait for live telemetry before motor control.",
+//         true,
+//         seconds: 8,
+//       );
+//       return;
+//     }
+//
+//     FocusScope.of(context).unfocus();
+//     HapticFeedback.mediumImpact();
+//
+//     final typedCustomerName = customerNameController.text.trim();
+//     final motorVm = ref.read(motorViewModelProvider.notifier);
+//
+//     // Validate before showing the command spinner.
+//     if (!motorRunning && typedCustomerName.isEmpty) {
+//       showMessage("Customer name is required to start motor.", true);
+//       return;
+//     }
+//
+//     if (mounted) {
+//       setState(() {
+//         motorStateBeforePendingCommand = motorRunning;
+//         isWaitingForVfdConfirmation = true;
+//       });
+//     }
+//
+//     try {
+//       if (motorRunning) {
+//         final stoppedLog = await motorVm.stopMotor(
+//           deviceId: deviceId!,
+//           customerName: activeKhataEntry?.customerName ??
+//               (typedCustomerName.isEmpty ? "Mobile App" : typedCustomerName),
+//         );
+//
+//         final updatedMotorState = ref.read(motorViewModelProvider);
+//
+//         if (updatedMotorState.error != null) {
+//           showMessage(updatedMotorState.error!, true, seconds: 10);
+//           return;
+//         }
+//
+//         final endTime = stoppedLog?.endTime ?? DateTime.now();
+//
+//         // Do NOT close Khata or show OFF just because the stop API returned.
+//         // Billing/timer stop only after VFD telemetry itself confirms OFF.
+//         final vfdConfirmedOff = await _waitForVfdConfirmation(
+//           expectedOn: false,
+//           telemetryTimestampBeforeCommand: telemetryTimestampBeforeCommand,
+//         );
+//
+//         if (!vfdConfirmedOff) {
+//           showMessage(
+//             "Stop command was sent, but OFF confirmation was not received from VFD telemetry.",
+//             true,
+//             seconds: 10,
+//           );
+//           return;
+//         }
+//
+//         // VFD is physically OFF now. Stop the HOME timer immediately.
+//         // Khata finalization is a separate server operation and must never
+//         // keep the physical motor timer running.
+//         _stopLocalTimer();
+//
+//         if (mounted) {
+//           setState(() {
+//             runSeconds = 0;
+//           });
+//         } else {
+//           runSeconds = 0;
+//         }
+//
+//         // Do not rely only on the in-memory activeKhataEntry.
+//         // It can be lost after navigation/app resume/rebuild.
+//         // Reload from server and recover the real open entry if needed.
+//         await ref.read(khataViewModelProvider.notifier).loadEntries();
+//
+//         final entryToClose =
+//             activeKhataEntry ?? _latestOpenKhataForCurrentDevice();
+//
+//         if (entryToClose == null) {
+//           activeKhataEntry = null;
+//
+//           showMessage(
+//             "Motor stopped. No open Khata session was found to finalize.",
+//             false,
+//           );
+//           return;
+//         }
+//
+//         final closedEntry =
+//         await ref.read(khataViewModelProvider.notifier).closeMotorKhataSession(
+//           entry: entryToClose,
+//           endTime: endTime,
+//         );
+//
+//         // IMPORTANT:
+//         // Never forget the open entry when the close API failed.
+//         // Previous code set activeKhataEntry=null even when ViewModel
+//         // returned null, leaving backend is_open=true forever.
+//         if (closedEntry == null) {
+//           activeKhataEntry = entryToClose;
+//
+//           final khataError = ref.read(khataViewModelProvider).error;
+//
+//           showMessage(
+//             "Motor is OFF, but Khata finalization failed: "
+//                 "${khataError ?? "Unknown Khata close error"}",
+//             true,
+//             seconds: 14,
+//           );
+//           return;
+//         }
+//
+//         activeKhataEntry = null;
+//
+//         // Reload the authoritative finalized values:
+//         // ended_at, is_open=false, run_hours and recalculated bill.
+//         await ref.read(khataViewModelProvider.notifier).loadEntries();
+//
+//         final stillOpen = _latestOpenKhataForCurrentDevice();
+//
+//         if (stillOpen != null &&
+//             stillOpen.id == closedEntry.id) {
+//           activeKhataEntry = stillOpen;
+//
+//           showMessage(
+//             "Motor is OFF, but backend still reports this Khata as open.",
+//             true,
+//             seconds: 14,
+//           );
+//           return;
+//         }
+//
+//         showMessage(
+//           "Motor stopped. Khata finalized: "
+//               "${closedEntry.runHours.toStringAsFixed(2)} hr.",
+//           false,
+//         );
+//         return;
+//       }
+//
+//       final startedLog = await motorVm.startMotor(
+//         deviceId: deviceId!,
+//         customerName: typedCustomerName,
+//       );
+//       if (startedLog != null && mounted) {
+//         setState(() {
+//           activeTriggerType = startedLog.triggerType;
+//         });
+//       }
+//
+//       final motorCommandStartedAt = startedLog?.startTime ?? DateTime.now();
+//
+//       final updatedMotorState = ref.read(motorViewModelProvider);
+//
+//       if (updatedMotorState.error != null) {
+//         showMessage(updatedMotorState.error!, true, seconds: 10);
+//         return;
+//       }
+//
+//       // Do NOT open Khata or show ON just because the start API returned.
+//       // Billing/timer begin only after VFD telemetry itself confirms ON.
+//       final vfdConfirmedOn = await _waitForVfdConfirmation(
+//         expectedOn: true,
+//         telemetryTimestampBeforeCommand: telemetryTimestampBeforeCommand,
+//       );
+//
+//       if (!vfdConfirmedOn) {
+//         showMessage(
+//           "Start command was sent, but ON confirmation was not received from VFD telemetry.",
+//           true,
+//           seconds: 10,
+//         );
+//         return;
+//       }
+//
+//       // VFD has confirmed ON, so the motor timer must run even if
+//       // Khata creation fails. Billing failure must never make the UI
+//       // pretend the motor is stopped.
+//       if (mounted) {
+//         setState(() {
+//           runSeconds = 0;
+//         });
+//       }
+//
+//       _startLocalTimer(startedAt: motorCommandStartedAt);
+//
+//       // A real MotorLog UUID is mandatory for an open Khata session.
+//       // run_hours is intentionally 0 while the motor is still running.
+//       if (startedLog == null) {
+//         showMessage(
+//           "Motor is ON, but start API returned no MotorLog. Khata was not created.",
+//           true,
+//           seconds: 12,
+//         );
+//         return;
+//       }
+//
+//       final motorLogId = startedLog.id?.trim() ?? "";
+//
+//       if (motorLogId.isEmpty) {
+//         showMessage(
+//           "Motor is ON, but MotorLog ID is missing from the start response. "
+//               "Khata was not created. Check POST /motor/$deviceId/start response.",
+//           true,
+//           seconds: 14,
+//         );
+//         return;
+//       }
+//
+//       activeKhataEntry =
+//       await ref.read(khataViewModelProvider.notifier).startMotorKhataSession(
+//         customerName: typedCustomerName,
+//         deviceId: deviceId!,
+//         motorLogId: motorLogId,
+//         startTime: startedLog.startTime ?? motorCommandStartedAt,
+//       );
+//
+//       if (activeKhataEntry == null) {
+//         final khataError = ref.read(khataViewModelProvider).error;
+//
+//         showMessage(
+//           "Motor is ON, but Khata was not created: "
+//               "${khataError ?? "Unknown Khata API error"}",
+//           true,
+//           seconds: 14,
+//         );
+//         return;
+//       }
+//
+//       await ref.read(khataViewModelProvider.notifier).loadEntries();
+//
+//       showMessage("Motor started. Khata session opened.", false);
+//     } catch (e) {
+//       showMessage(
+//         "Motor action failed: ${friendlyError(e.toString())}",
+//         true,
+//         seconds: 12,
+//       );
+//     } finally {
+//       if (mounted) {
+//         setState(() {
+//           isWaitingForVfdConfirmation = false;
+//           motorStateBeforePendingCommand = null;
+//         });
+//       } else {
+//         isWaitingForVfdConfirmation = false;
+//         motorStateBeforePendingCommand = null;
+//       }
+//     }
+//   }
+//
+//   void showMessage(String text, bool isError, {int seconds = 6}) {
+//     if (!mounted) return;
+//
+//     ScaffoldMessenger.of(context)
+//       ..clearSnackBars()
+//       ..showSnackBar(
+//         SnackBar(
+//           duration: Duration(seconds: isError ? seconds : 4),
+//           behavior: SnackBarBehavior.floating,
+//           margin: const EdgeInsets.all(16),
+//           shape: RoundedRectangleBorder(
+//             borderRadius: BorderRadius.circular(14),
+//           ),
+//           backgroundColor: isError ? AppColors.error : AppColors.green,
+//           content: Text(
+//             isError ? friendlyError(text) : text,
+//             style: const TextStyle(
+//               color: AppColors.white,
+//               fontWeight: FontWeight.w800,
+//             ),
+//           ),
+//         ),
+//       );
+//   }
+//
+//   List<String> customerSuggestions() {
+//     if (!hasDevice) return <String>[];
+//
+//     final khataState = ref.watch(khataViewModelProvider);
+//     final names = <String>[];
+//     final seen = <String>{};
+//
+//     // Newest customers first. Duplicate names are removed case-insensitively.
+//     for (final entry in khataState.entries.reversed) {
+//       final name = entry.customerName?.trim();
+//       if (name == null || name.isEmpty) continue;
+//
+//       final key = name.toLowerCase();
+//       if (seen.add(key)) {
+//         names.add(name);
+//       }
+//     }
+//
+//     return names.take(20).toList();
+//   }
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final latest = ref.watch(
+//       telemetryViewModelProvider.select((state) => state.latest),
+//     );
+//
+//     final motorLoading = ref.watch(
+//       motorViewModelProvider.select((state) => state.isLoading),
+//     );
+//
+//     final motorButtonLoading =
+//         hasDevice && (motorLoading || isWaitingForVfdConfirmation);
+//
+//     final checkingDevice = hasDevice && !firstTelemetryLoaded;
+//
+//     final effectiveLatest = hasDevice && firstTelemetryLoaded ? latest : null;
+//
+//     final deviceOnline = checkingDevice ? false : isDeviceOnline(effectiveLatest);
+//     final telemetryMotorRunning =
+//     checkingDevice ? false : isMotorRunning(effectiveLatest);
+//
+//     final motorRunning = isWaitingForVfdConfirmation &&
+//         motorStateBeforePendingCommand != null
+//         ? motorStateBeforePendingCommand!
+//         : telemetryMotorRunning;
+//
+//     final displayLatest = deviceOnline ? effectiveLatest : null;
+//
+//     if (motorRunning &&
+//         runTimer == null &&
+//         !isWaitingForVfdConfirmation &&
+//         didRestoreMotorSession) {
+//       WidgetsBinding.instance.addPostFrameCallback((_) {
+//         if (mounted && runTimer == null) {
+//           _startLocalTimer(
+//             startedAt: activeKhataEntry?.startTime ?? motorStartedAt,
+//           );
+//         }
+//       });
+//     }
+//
+//     // Never reset the run timer just because telemetry becomes stale while
+//     // the app is backgrounded. Stop it only when fresh VFD telemetry says OFF.
+//     if (deviceOnline &&
+//         !telemetryMotorRunning &&
+//         runTimer != null &&
+//         !isWaitingForVfdConfirmation) {
+//       WidgetsBinding.instance.addPostFrameCallback((_) {
+//         if (mounted && runTimer != null) {
+//           _stopLocalTimer();
+//           setState(() {
+//             runSeconds = 0;
+//           });
+//         }
+//       });
+//     }
+//
+//     final width = MediaQuery.of(context).size.width;
+//
+//     final isVerySmall = width < 360;
+//     final isTablet = width >= 650;
+//     final isLarge = width >= 1000;
+//
+//     final horizontalPadding = isLarge
+//         ? 38.0
+//         : isTablet
+//         ? 30.0
+//         : 16.0;
+//
+//     final crossAxisCount = isLarge
+//         ? 4
+//         : isTablet
+//         ? 3
+//         : 2;
+//
+//     final childAspectRatio = isLarge
+//         ? 1.36
+//         : isTablet
+//         ? 1.22
+//         : 1.02;
+//
+//     final buttonSize = isLarge
+//         ? 238.0
+//         : isTablet
+//         ? 226.0
+//         : isVerySmall
+//         ? 176.0
+//         : 196.0;
+//
+//     final resolvedDisplayName = deviceName != null && deviceName!.isNotEmpty
+//         ? deviceName!
+//         : hasDevice
+//         ? deviceId!
+//         : "Smart Motor Controller";
+//
+//     return Scaffold(
+//       backgroundColor: AppColors.darkBgSoft,
+//       drawer: hasDevice ? ProfessionalDrawer(deviceId: deviceId!) : null,
+//       appBar: SmartWellHomeAppBar(
+//         hasDevice: hasDevice,
+//         deviceOnline: deviceOnline,
+//         onSelectDevice: () {
+//           Navigator.pushReplacementNamed(context, AppRoutes.devices);
+//         },
+//       ),
+//       body: SafeArea(
+//         child: RefreshIndicator(
+//           color: AppColors.primary,
+//           backgroundColor: AppColors.cardDark,
+//           onRefresh: () async {
+//             if (hasDevice) {
+//               await loadTelemetry(showError: true);
+//               await ref.read(khataViewModelProvider.notifier).loadEntries();
+//               await _restoreMotorSessionFromKhata();
+//             } else {
+//               showMessage("Please select a device first.", true);
+//             }
+//           },
+//           child: SingleChildScrollView(
+//             physics: const AlwaysScrollableScrollPhysics(
+//               parent: BouncingScrollPhysics(),
+//             ),
+//             padding: EdgeInsets.symmetric(
+//               horizontal: horizontalPadding,
+//               vertical: 18,
+//             ),
+//             child: Center(
+//               child: ConstrainedBox(
+//                 constraints: const BoxConstraints(maxWidth: 1080),
+//                 child: Column(
+//                   crossAxisAlignment: CrossAxisAlignment.stretch,
+//                   children: [
+//                     // SmartDeviceHeaderCard(
+//                     //   hasDevice: hasDevice,
+//                     //   deviceOnline: deviceOnline,
+//                     //   motorRunning: motorRunning,
+//                     //   displayName: resolvedDisplayName,
+//                     //   deviceId: deviceId,
+//                     // ),
+//                     SmartDeviceHeaderCard(
+//                       hasDevice: hasDevice,
+//                       deviceOnline: deviceOnline,
+//                       motorRunning: motorRunning,
+//                       displayName: resolvedDisplayName,
+//                       deviceId: deviceId,
+//                       triggerType: activeTriggerType,
+//                     ),
+//                     if (!hasDevice) ...[
+//                       const SizedBox(height: 12),
+//                       NoDeviceProfessionalNotice(
+//                         onSelectDevice: () {
+//                           Navigator.pushReplacementNamed(
+//                             context,
+//                             AppRoutes.devices,
+//                           );
+//                         },
+//                       ),
+//                     ],
+//                     if (hasDevice && !deviceOnline) ...[
+//                       const SizedBox(height: 12),
+//                       DeviceOfflineNotice(
+//                         onRetry: () => loadTelemetry(showError: true),
+//                       ),
+//                     ],
+//                     if (hasDevice && deviceOnline) ...[
+//                       const SizedBox(height: 12),
+//                       DeviceOnlineNotice(
+//                         motorRunning: motorRunning,
+//                       ),
+//                     ],
+//                     const SizedBox(height: 18),
+//                     CustomerNameInputCard(
+//                       controller: customerNameController,
+//                       focusNode: customerNameFocusNode,
+//                       suggestions: customerSuggestions(),
+//                       enabled: hasDevice && deviceOnline,
+//                     ),
+//                     const SizedBox(height: 26),
+//                     Center(
+//                       child: GestureDetector(
+//                         onTap: motorButtonLoading ? null : toggleMotor,
+//                         child: AnimatedBuilder(
+//                           animation: pulseAnimation,
+//                           builder: (context, child) {
+//                             final scale = motorButtonLoading
+//                                 ? 1.0
+//                                 : motorRunning
+//                                 ? 1.0 + ((pulseAnimation.value - 1.0) * 0.28)
+//                                 : 1.0;
+//
+//                             return Transform.scale(
+//                               scale: scale,
+//                               child: child,
+//                             );
+//                           },
+//                           child: MotorCommandButton(
+//                             hasDevice: hasDevice,
+//                             deviceOnline: deviceOnline,
+//                             isOn: motorRunning,
+//                             loading: motorButtonLoading,
+//                             size: buttonSize,
+//                           ),
+//                         ),
+//                       ),
+//                     ),
+//                     const SizedBox(height: 18),
+//                     MotorRunStatusCard(
+//                       hasDevice: hasDevice,
+//                       deviceOnline: deviceOnline,
+//                       isOn: motorRunning,
+//                       waitingForVfd: isWaitingForVfdConfirmation,
+//                       runningTime: runningTime,
+//                     ),
+//                     const SizedBox(height: 22),
+//                     ParameterGridSection(
+//                       crossAxisCount: crossAxisCount,
+//                       childAspectRatio: childAspectRatio,
+//                       metrics: [
+//                         ParameterMetric(
+//                           icon: Icons.sync_rounded,
+//                           title: "Frequency",
+//                           value: formatValue(displayLatest?.freq, "Hz"),
+//                           highlight: true,
+//                         ),
+//                         ParameterMetric(
+//                           icon: Icons.bolt_rounded,
+//                           title: "Voltage",
+//                           value: formatValue(displayLatest?.voltage, "V"),
+//                         ),
+//                         ParameterMetric(
+//                           icon: Icons.flash_on_rounded,
+//                           title: "Current",
+//                           value: formatValue(displayLatest?.current, "A"),
+//                         ),
+//                         ParameterMetric(
+//                           icon: Icons.power_rounded,
+//                           title: "Power",
+//                           value: formatValue(displayLatest?.power, "kW"),
+//                         ),
+//                         ParameterMetric(
+//                           icon: Icons.speed_rounded,
+//                           title: "Load",
+//                           value: formatValue(
+//                             displayLatest?.powerPercent,
+//                             "%",
+//                           ),
+//                         ),
+//                         ParameterMetric(
+//                           icon: Icons.rotate_right_rounded,
+//                           title: "Motor Speed",
+//                           value: formatValue(
+//                             displayLatest?.motorSpeed,
+//                             "RPM",
+//                           ),
+//                         ),
+//                         ParameterMetric(
+//                           icon: Icons.battery_charging_full_rounded,
+//                           title: "DC Bus",
+//                           value: formatValue(displayLatest?.dcbus, "V"),
+//                         ),
+//                         ParameterMetric(
+//                           icon: Icons.electric_meter_rounded,
+//                           title: "Energy",
+//                           value: formatValue(
+//                             displayLatest?.energyIn,
+//                             "kWh",
+//                           ),
+//                         ),
+//                       ],
+//                     ),
+//                   ],
+//                 ),
+//               ),
+//             ),
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+// }
+//
+// class SmartWellHomeAppBar extends StatelessWidget
+//     implements PreferredSizeWidget {
+//   final bool hasDevice;
+//   final bool deviceOnline;
+//   final VoidCallback onSelectDevice;
+//
+//   const SmartWellHomeAppBar({
+//     super.key,
+//     required this.hasDevice,
+//     required this.deviceOnline,
+//     required this.onSelectDevice,
+//   });
+//
+//   @override
+//   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final statusText = !hasDevice
+//         ? "No device selected"
+//         : deviceOnline
+//         ? "Device online"
+//         : "Waiting for device";
+//
+//     final statusColor = !hasDevice
+//         ? AppColors.white.withOpacity(0.55)
+//         : deviceOnline
+//         ? AppColors.green
+//         : AppColors.warning;
+//
+//     return AppBar(
+//       backgroundColor: AppColors.primaryDark.withOpacity(0.96),
+//       elevation: 2,
+//       shadowColor: Colors.black.withOpacity(0.18),
+//       centerTitle: false,
+//       automaticallyImplyLeading: hasDevice,
+//       iconTheme: const IconThemeData(color: AppColors.white),
+//       titleSpacing: 18,
+//       title: Row(
+//         children: [
+//           Container(
+//             height: 42,
+//             width: 42,
+//             decoration: BoxDecoration(
+//               borderRadius: BorderRadius.circular(14),
+//               gradient: LinearGradient(
+//                 begin: Alignment.topLeft,
+//                 end: Alignment.bottomRight,
+//                 colors: [
+//                   AppColors.primaryDark,
+//                   AppColors.primary,
+//                 ],
+//               ),
+//             ),
+//             child: const Icon(
+//               Icons.electric_bolt_rounded,
+//               color: AppColors.white,
+//               size: 24,
+//             ),
+//           ),
+//           const SizedBox(width: 14),
+//           Expanded(
+//             child: Column(
+//               crossAxisAlignment: CrossAxisAlignment.start,
+//               mainAxisSize: MainAxisSize.min,
+//               children: [
+//                 const Text(
+//                   "AabNex",
+//                   maxLines: 1,
+//                   overflow: TextOverflow.ellipsis,
+//                   style: TextStyle(
+//                     color: AppColors.white,
+//                     fontSize: 20,
+//                     fontWeight: FontWeight.w900,
+//                   ),
+//                 ),
+//                 const SizedBox(height: 2),
+//                 Text(
+//                   statusText,
+//                   maxLines: 1,
+//                   overflow: TextOverflow.ellipsis,
+//                   style: TextStyle(
+//                     color: statusColor,
+//                     fontSize: 11.5,
+//                     fontWeight: FontWeight.w800,
+//                   ),
+//                 ),
+//               ],
+//             ),
+//           ),
+//         ],
+//       ),
+//       actions: [
+//         Padding(
+//           padding: const EdgeInsets.only(right: 10),
+//           child: IconButton(
+//             tooltip: "Select Device",
+//             onPressed: onSelectDevice,
+//             icon: Container(
+//               padding: const EdgeInsets.all(10),
+//               decoration: BoxDecoration(
+//                 color: AppColors.cardDark.withOpacity(0.94),
+//                 borderRadius: BorderRadius.circular(14),
+//                 border: Border.all(color: AppColors.white.withOpacity(0.14)),
+//               ),
+//               child: const Icon(
+//                 Icons.devices_other_rounded,
+//                 color: AppColors.primary,
+//                 size: 22,
+//               ),
+//             ),
+//           ),
+//         ),
+//       ],
+//     );
+//   }
+// }
+//
+// class SmartDeviceHeaderCard extends StatelessWidget {
+//   final bool hasDevice;
+//   final bool deviceOnline;
+//   final bool motorRunning;
+//   final String displayName;
+//   final String? deviceId;
+//   final String? triggerType;
+//
+//   const SmartDeviceHeaderCard({
+//     super.key,
+//     required this.hasDevice,
+//     required this.deviceOnline,
+//     required this.motorRunning,
+//     required this.displayName,
+//     required this.deviceId,
+//     this.triggerType,
+//   });
+//
+//   String _formatTriggerType(String? value) {
+//     switch (value?.toLowerCase().trim()) {
+//       case 'physical':
+//         return 'Physical Button';
+//
+//       case 'time':
+//       case 'timer':
+//         return 'Timer';
+//
+//       case 'schedule':
+//         return 'Schedule';
+//
+//       case 'app':
+//         return 'App';
+//
+//       default:
+//         return 'Unknown';
+//     }
+//   }
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final color = !hasDevice
+//         ? AppColors.primary
+//         : !deviceOnline
+//         ? AppColors.warning
+//         : motorRunning
+//         ? AppColors.greenDark
+//         : AppColors.primary;
+//
+//     final icon = !hasDevice
+//         ? Icons.hub_outlined
+//         : !deviceOnline
+//         ? Icons.wifi_tethering_error_rounded
+//         : motorRunning
+//         ? Icons.power_settings_new_rounded
+//         : Icons.verified_rounded;
+//
+//     final statusText = !hasDevice
+//         ? "Ready to connect"
+//         : !deviceOnline
+//         ? "Waiting for live telemetry"
+//         : motorRunning
+//         ? "Device online | Motor ON"
+//         : "Device online | Motor OFF";
+//
+//     final triggerText = _formatTriggerType(triggerType);
+//
+//     return Container(
+//       padding: const EdgeInsets.all(18),
+//       decoration: BoxDecoration(
+//         color: AppColors.cardDark.withOpacity(0.94),
+//         borderRadius: BorderRadius.circular(26),
+//         border: Border.all(color: AppColors.white.withOpacity(0.14)),
+//         boxShadow: [
+//           BoxShadow(
+//             color: color.withOpacity(0.10),
+//             blurRadius: 28,
+//             offset: const Offset(0, 14),
+//           ),
+//         ],
+//       ),
+//       child: Row(
+//         children: [
+//           Container(
+//             height: 62,
+//             width: 62,
+//             decoration: BoxDecoration(
+//               color: color.withOpacity(0.14),
+//               borderRadius: BorderRadius.circular(20),
+//             ),
+//             child: Icon(
+//               icon,
+//               color: color,
+//               size: 32,
+//             ),
+//           ),
+//
+//           const SizedBox(width: 14),
+//
+//           Expanded(
+//             child: Column(
+//               crossAxisAlignment: CrossAxisAlignment.start,
+//               children: [
+//                 Text(
+//                   displayName,
+//                   maxLines: 1,
+//                   overflow: TextOverflow.ellipsis,
+//                   style: const TextStyle(
+//                     color: AppColors.white,
+//                     fontSize: 17,
+//                     fontWeight: FontWeight.w900,
+//                   ),
+//                 ),
+//
+//                 const SizedBox(height: 6),
+//
+//                 Text(
+//                   statusText,
+//                   style: TextStyle(
+//                     color: color,
+//                     fontSize: 14,
+//                     fontWeight: FontWeight.w800,
+//                   ),
+//                 ),
+//
+//                 // -----------------------------
+//                 // MOTOR TRIGGER TYPE
+//                 // -----------------------------
+//                 if (motorRunning && triggerType != null) ...[
+//                   const SizedBox(height: 5),
+//
+//                   Row(
+//                     children: [
+//                       Icon(
+//                         Icons.touch_app_rounded,
+//                         size: 14,
+//                         color: AppColors.white.withOpacity(0.60),
+//                       ),
+//                       const SizedBox(width: 5),
+//                       Text(
+//                         "Started by: ",
+//                         style: TextStyle(
+//                           color: AppColors.white.withOpacity(0.45),
+//                           fontSize: 11,
+//                           fontWeight: FontWeight.w700,
+//                         ),
+//                       ),
+//                       Text(
+//                         triggerText,
+//                         style: TextStyle(
+//                           color: color,
+//                           fontSize: 11,
+//                           fontWeight: FontWeight.w900,
+//                         ),
+//                       ),
+//                     ],
+//                   ),
+//                 ],
+//
+//                 const SizedBox(height: 5),
+//
+//                 Text(
+//                   hasDevice
+//                       ? (deviceId ?? "Unknown device")
+//                       : "No controller selected",
+//                   maxLines: 1,
+//                   overflow: TextOverflow.ellipsis,
+//                   style: TextStyle(
+//                     color: AppColors.white.withOpacity(0.45),
+//                     fontSize: 11,
+//                     fontWeight: FontWeight.w700,
+//                   ),
+//                 ),
+//               ],
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+//
+// class NoDeviceProfessionalNotice extends StatelessWidget {
+//   final VoidCallback onSelectDevice;
+//
+//   const NoDeviceProfessionalNotice({
+//     super.key,
+//     required this.onSelectDevice,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return Container(
+//       padding: const EdgeInsets.all(18),
+//       decoration: BoxDecoration(
+//         color: AppColors.cardDark.withOpacity(0.94),
+//         borderRadius: BorderRadius.circular(24),
+//         border: Border.all(color: AppColors.white.withOpacity(0.14)),
+//       ),
+//       child: Row(
+//         children: [
+//           Container(
+//             height: 46,
+//             width: 46,
+//             decoration: BoxDecoration(
+//               color: AppColors.primary.withOpacity(0.10),
+//               borderRadius: BorderRadius.circular(16),
+//             ),
+//             child: const Icon(
+//               Icons.devices_other_rounded,
+//               color: AppColors.primary,
+//             ),
+//           ),
+//           const SizedBox(width: 14),
+//           Expanded(
+//             child: Text(
+//               "Select a device to enable motor control. Parameters stay empty until a controller is selected.",
+//               style: TextStyle(
+//                 color: AppColors.white.withOpacity(0.68),
+//                 fontSize: 13.5,
+//                 height: 1.4,
+//                 fontWeight: FontWeight.w700,
+//               ),
+//             ),
+//           ),
+//           const SizedBox(width: 10),
+//           TextButton(
+//             onPressed: onSelectDevice,
+//             child: const Text(
+//               "Select",
+//               style: TextStyle(
+//                 color: AppColors.primary,
+//                 fontWeight: FontWeight.w900,
+//               ),
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+//
+// class DeviceOfflineNotice extends StatelessWidget {
+//   final Future<void> Function() onRetry;
+//
+//   const DeviceOfflineNotice({
+//     super.key,
+//     required this.onRetry,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return Container(
+//       padding: const EdgeInsets.all(14),
+//       decoration: BoxDecoration(
+//         color: AppColors.warning.withOpacity(0.10),
+//         borderRadius: BorderRadius.circular(18),
+//         border: Border.all(color: AppColors.warning.withOpacity(0.24)),
+//       ),
+//       child: Row(
+//         children: [
+//           const Icon(
+//             Icons.info_outline_rounded,
+//             color: AppColors.warning,
+//             size: 22,
+//           ),
+//           const SizedBox(width: 10),
+//           Expanded(
+//             child: Text(
+//               "Device selected. Waiting for latest live reading.",
+//               style: TextStyle(
+//                 color: AppColors.white.withOpacity(0.78),
+//                 fontSize: 12.8,
+//                 fontWeight: FontWeight.w700,
+//               ),
+//             ),
+//           ),
+//           TextButton(
+//             onPressed: onRetry,
+//             child: const Text(
+//               "Retry",
+//               style: TextStyle(
+//                 color: AppColors.warning,
+//                 fontWeight: FontWeight.w900,
+//               ),
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+//
+// class DeviceOnlineNotice extends StatelessWidget {
+//   final bool motorRunning;
+//
+//   const DeviceOnlineNotice({
+//     super.key,
+//     required this.motorRunning,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     // final text = motorRunning
+//     //     ? "Live telemetry received. Motor is running."
+//     //     : "Live telemetry received. Motor is stopped.";
+//
+//     return Container(
+//       padding: const EdgeInsets.all(14),
+//       decoration: BoxDecoration(
+//         color: AppColors.darkBorderSoft,
+//         borderRadius: BorderRadius.circular(18),
+//         border: Border.all(color: AppColors.green.withOpacity(0.24)),
+//       ),
+//       child: Row(
+//         children: [
+//           const Icon(
+//             Icons.check_circle_rounded,
+//             color: AppColors.green,
+//             size: 22,
+//           ),
+//           const SizedBox(width: 10),
+//           // Expanded(
+//           //   child: Text(
+//           //     text,
+//           //     style: TextStyle(
+//           //       color: AppColors.white.withOpacity(0.78),
+//           //       fontSize: 12.8,
+//           //       fontWeight: FontWeight.w700,
+//           //     ),
+//           //   ),
+//           // ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+//
+// class CustomerNameInputCard extends StatelessWidget {
+//   final TextEditingController controller;
+//   final FocusNode focusNode;
+//   final List<String> suggestions;
+//   final bool enabled;
+//
+//   const CustomerNameInputCard({
+//     super.key,
+//     required this.controller,
+//     required this.focusNode,
+//     required this.suggestions,
+//     required this.enabled,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return Column(
+//       crossAxisAlignment: CrossAxisAlignment.start,
+//       children: [
+//         Padding(
+//           padding: const EdgeInsets.only(left: 4, bottom: 9),
+//           child: Row(
+//             children: [
+//               Icon(
+//                 Icons.account_circle_outlined,
+//                 size: 17,
+//                 color: AppColors.white.withOpacity(0.48),
+//               ),
+//               const SizedBox(width: 7),
+//               Text(
+//                 "CUSTOMER / KHATA",
+//                 style: TextStyle(
+//                   color: AppColors.white.withOpacity(1),
+//                   fontSize: 11,
+//                   letterSpacing: 1.1,
+//                   fontWeight: FontWeight.w900,
+//                 ),
+//               ),
+//             ],
+//           ),
+//         ),
+//         RawAutocomplete<String>(
+//           textEditingController: controller,
+//           focusNode: focusNode,
+//           optionsBuilder: (TextEditingValue value) {
+//             if (!enabled) return const Iterable<String>.empty();
+//
+//             final input = value.text.trim().toLowerCase();
+//
+//             if (input.isEmpty) {
+//               return suggestions.take(8);
+//             }
+//
+//             final startsWith = <String>[];
+//             final contains = <String>[];
+//
+//             for (final name in suggestions) {
+//               final lower = name.toLowerCase();
+//               if (lower.startsWith(input)) {
+//                 startsWith.add(name);
+//               } else if (lower.contains(input)) {
+//                 contains.add(name);
+//               }
+//             }
+//
+//             return [...startsWith, ...contains].take(8);
+//           },
+//           onSelected: (String value) {
+//             controller.text = value;
+//             controller.selection = TextSelection.collapsed(
+//               offset: controller.text.length,
+//             );
+//           },
+//           fieldViewBuilder: (
+//               context,
+//               textEditingController,
+//               fieldFocusNode,
+//               onFieldSubmitted,
+//               ) {
+//             return AnimatedContainer(
+//               duration: const Duration(milliseconds: 180),
+//               decoration: BoxDecoration(
+//                 color: AppColors.cardDark.withOpacity(0.94),
+//                 borderRadius: BorderRadius.circular(20),
+//                 border: Border.all(
+//                   color: fieldFocusNode.hasFocus
+//                       ? AppColors.primary.withOpacity(0.70)
+//                       : AppColors.white.withOpacity(0.14),
+//                 ),
+//                 boxShadow: [
+//                   BoxShadow(
+//                     color: Colors.black.withOpacity(0.16),
+//                     blurRadius: 16,
+//                     offset: const Offset(0, 8),
+//                   ),
+//                 ],
+//               ),
+//               child: TextField(
+//                 enabled: enabled,
+//                 controller: textEditingController,
+//                 focusNode: fieldFocusNode,
+//                 keyboardType: TextInputType.name,
+//                 textCapitalization: TextCapitalization.words,
+//                 autocorrect: false,
+//                 style: const TextStyle(
+//                   color: AppColors.white,
+//                   fontSize: 15.5,
+//                   fontWeight: FontWeight.w800,
+//                 ),
+//                 textInputAction: TextInputAction.done,
+//                 decoration: InputDecoration(
+//                   hintText: enabled
+//                       ? "Enter new or previous customer"
+//                       : "Device must be online first",
+//                   hintStyle: TextStyle(
+//                     color: AppColors.white.withOpacity(1),
+//                     fontWeight: FontWeight.w600,
+//                   ),
+//                   prefixIcon: Icon(
+//                     enabled
+//                         ? Icons.person_search_rounded
+//                         : Icons.lock_outline_rounded,
+//                     color: AppColors.white,
+//                   ),
+//                   suffixIcon: enabled && suggestions.isNotEmpty
+//                       ? Tooltip(
+//                     message: "Previous customers available",
+//                     child: Icon(
+//                       Icons.history_rounded,
+//                       color: AppColors.white.withOpacity(1),
+//                     ),
+//                   )
+//                       : null,
+//                   border: InputBorder.none,
+//                   contentPadding: const EdgeInsets.symmetric(
+//                     horizontal: 18,
+//                     vertical: 18,
+//                   ),
+//                 ),
+//               ),
+//             );
+//           },
+//           optionsViewBuilder: (context, onSelected, options) {
+//             final optionList = options.toList();
+//
+//             return Align(
+//               alignment: Alignment.topLeft,
+//               child: Material(
+//                 color: Colors.transparent,
+//                 child: Container(
+//                   width: MediaQuery.of(context).size.width - 36,
+//                   constraints: const BoxConstraints(
+//                     maxHeight: 290,
+//                     maxWidth: 560,
+//                   ),
+//                   margin: const EdgeInsets.only(top: 8),
+//                   decoration: BoxDecoration(
+//                     color: AppColors.cardDark.withOpacity(0.94),
+//                     borderRadius: BorderRadius.circular(18),
+//                     border: Border.all(color: AppColors.white.withOpacity(0.14)),
+//                     boxShadow: [
+//                       BoxShadow(
+//                         color: Colors.black.withOpacity(0.28),
+//                         blurRadius: 24,
+//                         offset: const Offset(0, 12),
+//                       ),
+//                     ],
+//                   ),
+//                   child: Column(
+//                     mainAxisSize: MainAxisSize.min,
+//                     crossAxisAlignment: CrossAxisAlignment.start,
+//                     children: [
+//                       Padding(
+//                         padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+//                         child: Row(
+//                           children: [
+//                             const Icon(
+//                               Icons.history_rounded,
+//                               color: AppColors.primary,
+//                               size: 18,
+//                             ),
+//                             const SizedBox(width: 8),
+//                             Text(
+//                               "Previous customers",
+//                               style: TextStyle(
+//                                 color: AppColors.white.withOpacity(0.62),
+//                                 fontSize: 12,
+//                                 fontWeight: FontWeight.w900,
+//                               ),
+//                             ),
+//                           ],
+//                         ),
+//                       ),
+//                       Flexible(
+//                         child: ListView.separated(
+//                           padding: const EdgeInsets.only(bottom: 7),
+//                           shrinkWrap: true,
+//                           itemCount: optionList.length,
+//                           separatorBuilder: (_, __) => Divider(
+//                             height: 1,
+//                             color: AppColors.white.withOpacity(0.06),
+//                           ),
+//                           itemBuilder: (context, index) {
+//                             final option = optionList[index];
+//
+//                             return ListTile(
+//                               dense: true,
+//                               leading: Container(
+//                                 height: 34,
+//                                 width: 34,
+//                                 alignment: Alignment.center,
+//                                 decoration: BoxDecoration(
+//                                   color: AppColors.primary.withOpacity(0.10),
+//                                   shape: BoxShape.circle,
+//                                 ),
+//                                 child: const Icon(
+//                                   Icons.person_rounded,
+//                                   color: AppColors.primary,
+//                                   size: 18,
+//                                 ),
+//                               ),
+//                               title: Text(
+//                                 option,
+//                                 style: const TextStyle(
+//                                   color: AppColors.white,
+//                                   fontWeight: FontWeight.w800,
+//                                 ),
+//                               ),
+//                               trailing: Icon(
+//                                 Icons.north_west_rounded,
+//                                 size: 17,
+//                                 color: AppColors.white.withOpacity(0.30),
+//                               ),
+//                               onTap: () => onSelected(option),
+//                             );
+//                           },
+//                         ),
+//                       ),
+//                     ],
+//                   ),
+//                 ),
+//               ),
+//             );
+//           },
+//         ),
+//         if (enabled)
+//           Padding(
+//             padding: const EdgeInsets.only(left: 5, top: 8),
+//             child: Text(
+//               suggestions.isEmpty
+//                   ? "New customer names will appear here next time."
+//                   : "Type to search, or select a previously used customer.",
+//               style: TextStyle(
+//                 color: AppColors.white.withOpacity(1),
+//                 fontSize: 11.5,
+//                 fontWeight: FontWeight.w600,
+//               ),
+//             ),
+//           ),
+//       ],
+//     );
+//   }
+// }
+//
+// class MotorCommandButton extends StatelessWidget {
+//   final bool hasDevice;
+//   final bool deviceOnline;
+//   final bool isOn;
+//   final bool loading;
+//   final double size;
+//
+//   const MotorCommandButton({
+//     super.key,
+//     required this.hasDevice,
+//     required this.deviceOnline,
+//     required this.isOn,
+//     required this.loading,
+//     required this.size,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final activeColor = !hasDevice
+//         ? AppColors.primary
+//         : !deviceOnline
+//         ? AppColors.warning
+//         : isOn
+//         ? AppColors.green
+//         : AppColors.error;
+//
+//     final label = !hasDevice
+//         ? "SELECT"
+//         : !deviceOnline
+//         ? "WAIT"
+//         : isOn
+//         ? "ON"
+//         : "OFF";
+//
+//     final icon = !hasDevice
+//         ? Icons.devices_other_rounded
+//         : !deviceOnline
+//         ? Icons.wifi_tethering_error_rounded
+//         : isOn
+//         ? Icons.power_settings_new_rounded
+//         : Icons.power_off_rounded;
+//
+//     final textColor = !hasDevice ? AppColors.black : AppColors.white;
+//
+//     return AnimatedContainer(
+//       duration: const Duration(milliseconds: 300),
+//       width: size,
+//       height: size,
+//       alignment: Alignment.center,
+//       decoration: BoxDecoration(
+//         shape: BoxShape.circle,
+//         gradient: LinearGradient(
+//           begin: Alignment.topLeft,
+//           end: Alignment.bottomRight,
+//           colors: [
+//             activeColor,
+//             activeColor.withOpacity(0.72),
+//           ],
+//         ),
+//         boxShadow: [
+//           BoxShadow(
+//             color: activeColor.withOpacity(0.30),
+//             blurRadius: 34,
+//             offset: const Offset(0, 16),
+//           ),
+//         ],
+//       ),
+//       child: loading
+//           ? const CircularProgressIndicator(color: AppColors.white)
+//           : Column(
+//         mainAxisAlignment: MainAxisAlignment.center,
+//         children: [
+//           Icon(
+//             icon,
+//             color: textColor,
+//             size: size < 190 ? 36 : 42,
+//           ),
+//           const SizedBox(height: 8),
+//           FittedBox(
+//             child: Text(
+//               label,
+//               style: TextStyle(
+//                 color: textColor,
+//                 fontSize: label == "SELECT"
+//                     ? 24
+//                     : label == "WAIT"
+//                     ? 24
+//                     : size < 190
+//                     ? 26
+//                     : 36,
+//                 fontWeight: FontWeight.w900,
+//               ),
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+//
+// class MotorRunStatusCard extends StatelessWidget {
+//   final bool hasDevice;
+//   final bool deviceOnline;
+//   final bool isOn;
+//   final bool waitingForVfd;
+//   final String runningTime;
+//
+//   const MotorRunStatusCard({
+//     super.key,
+//     required this.hasDevice,
+//     required this.deviceOnline,
+//     required this.isOn,
+//     required this.waitingForVfd,
+//     required this.runningTime,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final active = hasDevice && deviceOnline && isOn;
+//
+//     final title = !hasDevice
+//         ? "NO DEVICE"
+//         : !deviceOnline
+//         ? "WAITING FOR DEVICE"
+//         : waitingForVfd
+//         ? "SYNCING WITH VFD"
+//         : active
+//         ? "MOTOR RUN TIME"
+//         : "MOTOR STOPPED";
+//
+//     final subtitle = !hasDevice
+//         ? "Select a controller to start monitoring"
+//         : !deviceOnline
+//         ? "Waiting for fresh live telemetry"
+//         : waitingForVfd
+//         ? "Waiting for the VFD to confirm the command"
+//         : active
+//         ? "Elapsed time since this motor run started"
+//         : "Timer starts only after VFD confirms ON";
+//
+//     final accent = active ? AppColors.green : AppColors.primary;
+//
+//     return Container(
+//       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+//       decoration: BoxDecoration(
+//         color: AppColors.cardDark.withOpacity(0.94),
+//         borderRadius: BorderRadius.circular(20),
+//         border: Border.all(
+//           color: active
+//               ? AppColors.green.withOpacity(0.28)
+//               : AppColors.white.withOpacity(0.14),
+//         ),
+//       ),
+//       child: Row(
+//         children: [
+//           Container(
+//             height: 44,
+//             width: 44,
+//             alignment: Alignment.center,
+//             decoration: BoxDecoration(
+//               color: accent.withOpacity(0.11),
+//               borderRadius: BorderRadius.circular(14),
+//             ),
+//             child: waitingForVfd
+//                 ? SizedBox(
+//               height: 21,
+//               width: 21,
+//               child: CircularProgressIndicator(
+//                 strokeWidth: 2.4,
+//                 color: accent,
+//               ),
+//             )
+//                 : Icon(
+//               active ? Icons.timer_rounded : Icons.timer_off_outlined,
+//               color: accent,
+//               size: 23,
+//             ),
+//           ),
+//           const SizedBox(width: 13),
+//           Expanded(
+//             child: Column(
+//               crossAxisAlignment: CrossAxisAlignment.start,
+//               children: [
+//                 Text(
+//                   title,
+//                   style: TextStyle(
+//                     color: AppColors.white.withOpacity(0.54),
+//                     fontSize: 10.5,
+//                     letterSpacing: 0.9,
+//                     fontWeight: FontWeight.w900,
+//                   ),
+//                 ),
+//                 const SizedBox(height: 4),
+//                 Text(
+//                   subtitle,
+//                   maxLines: 2,
+//                   overflow: TextOverflow.ellipsis,
+//                   style: TextStyle(
+//                     color: AppColors.white.withOpacity(0.60),
+//                     fontSize: 11.8,
+//                     fontWeight: FontWeight.w600,
+//                   ),
+//                 ),
+//               ],
+//             ),
+//           ),
+//           const SizedBox(width: 12),
+//           Text(
+//             active ? runningTime : "00:00:00",
+//             style: TextStyle(
+//               color: active
+//                   ? AppColors.green
+//                   : AppColors.white.withOpacity(0.42),
+//               fontSize: 20,
+//               fontWeight: FontWeight.w900,
+//               fontFeatures: const [FontFeature.tabularFigures()],
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+//
+// class ParameterMetric {
+//   final IconData icon;
+//   final String title;
+//   final String value;
+//   final bool highlight;
+//
+//   const ParameterMetric({
+//     required this.icon,
+//     required this.title,
+//     required this.value,
+//     this.highlight = false,
+//   });
+// }
+//
+// class ParameterGridSection extends StatelessWidget {
+//   final int crossAxisCount;
+//   final double childAspectRatio;
+//   final List<ParameterMetric> metrics;
+//
+//   const ParameterGridSection({
+//     super.key,
+//     required this.crossAxisCount,
+//     required this.childAspectRatio,
+//     required this.metrics,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return GridView.count(
+//       shrinkWrap: true,
+//       physics: const NeverScrollableScrollPhysics(),
+//       crossAxisCount: crossAxisCount,
+//       crossAxisSpacing: 14,
+//       mainAxisSpacing: 14,
+//       childAspectRatio: childAspectRatio,
+//       children: metrics.map((metric) {
+//         return ParameterMetricCard(metric: metric);
+//       }).toList(),
+//     );
+//   }
+// }
+//
+// class ParameterMetricCard extends StatelessWidget {
+//   final ParameterMetric metric;
+//
+//   const ParameterMetricCard({
+//     super.key,
+//     required this.metric,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final width = MediaQuery.of(context).size.width;
+//     final compact = width < 360;
+//
+//     return Container(
+//       padding: EdgeInsets.all(compact ? 13 : 17),
+//       decoration: BoxDecoration(
+//         color: AppColors.cardDark.withOpacity(0.94),
+//         borderRadius: BorderRadius.circular(22),
+//         border: Border.all(
+//           color: metric.highlight
+//               ? AppColors.primary
+//               : AppColors.white,
+//         ),
+//         boxShadow: [
+//           BoxShadow(
+//             color: Colors.black.withOpacity(0.20),
+//             blurRadius: 18,
+//             offset: const Offset(0, 9),
+//           ),
+//         ],
+//       ),
+//       child: Column(
+//         crossAxisAlignment: CrossAxisAlignment.start,
+//         children: [
+//           Icon(
+//             metric.icon,
+//             color: metric.highlight
+//                 ? AppColors.primary
+//                 : AppColors.white.withOpacity(0.45),
+//             size: compact ? 24 : 28,
+//           ),
+//           const Spacer(),
+//           Text(
+//             metric.title,
+//             maxLines: 1,
+//             overflow: TextOverflow.ellipsis,
+//             style: TextStyle(
+//               color: AppColors.white,
+//               fontSize: compact ? 12.5 : 14,
+//               fontWeight: FontWeight.w700,
+//             ),
+//           ),
+//           const SizedBox(height: 8),
+//           FittedBox(
+//             alignment: Alignment.centerLeft,
+//             fit: BoxFit.scaleDown,
+//             child: Text(
+//               metric.value,
 //               style: TextStyle(
 //                 color: AppColors.white,
 //                 height: 1.25,
@@ -5090,142 +7399,2395 @@
 //   }
 // }
 //
-// class DeviceSessionCard extends StatelessWidget {
-//   final String? deviceName;
+// class HomeScreen extends ConsumerStatefulWidget {
 //   final String? deviceId;
-//   final MotorSnapshot snapshot;
-//   final int? timestamp;
 //
-//   const DeviceSessionCard({
+//   const HomeScreen({
 //     super.key,
-//     required this.deviceName,
-//     required this.deviceId,
-//     required this.snapshot,
-//     required this.timestamp,
+//     this.deviceId,
 //   });
 //
 //   @override
-//   Widget build(BuildContext context) {
-//     final liveText = snapshot.statusName;
-//     final liveColor = snapshot.bannerColor;
+//   ConsumerState<HomeScreen> createState() => _HomeScreenState();
+// }
 //
-//     final displayName = deviceName != null && deviceName!.trim().isNotEmpty
-//         ? deviceName!
-//         : snapshot.hasDevice
-//         ? "SmartWell VFD"
-//         : "Not Connected";
+// class _HomeScreenState extends ConsumerState<HomeScreen>
+//     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+//   late AnimationController pulseController;
+//   late Animation<double> pulseAnimation;
 //
-//     return Container(
-//       width: double.infinity,
-//       padding: const EdgeInsets.all(18),
-//       decoration: BoxDecoration(
-//         color: AppColors.cardDark,
-//         borderRadius: BorderRadius.circular(22),
-//         border: Border.all(color: AppColors.borderDark),
-//       ),
-//       child: Column(
-//         crossAxisAlignment: CrossAxisAlignment.start,
-//         children: [
-//           const Text(
-//             "Device Session",
-//             style: TextStyle(
+//   final TextEditingController customerNameController = TextEditingController();
+//   final FocusNode customerNameFocusNode = FocusNode();
+//
+//   KhataEntryModel? activeKhataEntry;
+//   String? activeTriggerType;
+//
+//   Timer? telemetryTimer;
+//   Timer? runTimer;
+//
+//   int runSeconds = 0;
+//   DateTime? motorStartedAt;
+//
+//   // Authoritative MotorLog timestamps returned by the server/database.
+//   DateTime? serverMotorStartedAt;
+//   DateTime? serverMotorStoppedAt;
+//
+//   String? userId;
+//   String? deviceId;
+//   String? deviceName;
+//
+//   bool didSetupDevice = false;
+//   bool isTelemetryLoading = false;
+//   bool firstTelemetryLoaded = false;
+//
+//   // Prevents the UI from starting a brand-new timer before we have checked
+//   // whether an existing open Khata session already has the real start time.
+//   bool didRestoreMotorSession = false;
+//   bool isRestoringMotorSession = false;
+//
+//   // Keeps the motor button in loading state until VFD telemetry confirms
+//   // the requested ON/OFF state.
+//   bool isWaitingForVfdConfirmation = false;
+//
+//   // While a command is pending, keep showing the last confirmed state.
+//   // This prevents ON -> OFF -> ON / OFF -> ON -> OFF visual flicker.
+//   bool? motorStateBeforePendingCommand;
+//
+//   // Track physical VFD transitions separately from app commands.
+//   // If VFD turns OFF unexpectedly, the current run is frozen.
+//   // If it later comes ON by itself, the old timer is NOT resumed because
+//   // that would incorrectly include the OFF period in runtime/billing.
+//   bool? _lastFreshVfdRunning;
+//   bool _vfdSessionInterrupted = false;
+//   bool _vfdRestartedAfterInterruption = false;
+//
+//   bool get hasDevice => deviceId != null && deviceId!.trim().isNotEmpty;
+//
+//   @override
+//   void initState() {
+//     super.initState();
+//     WidgetsBinding.instance.addObserver(this);
+//
+//     pulseController = AnimationController(
+//       vsync: this,
+//       duration: const Duration(milliseconds: 850),
+//     )..repeat(reverse: true);
+//
+//     pulseAnimation = Tween<double>(begin: 0.82, end: 1.12).animate(
+//       CurvedAnimation(parent: pulseController, curve: Curves.easeInOut),
+//     );
+//   }
+//
+//   @override
+//   void didChangeAppLifecycleState(AppLifecycleState state) {
+//     if (state == AppLifecycleState.resumed) {
+//       _refreshRunSeconds();
+//
+//       if (hasDevice) {
+//         Future.microtask(() async {
+//           await loadTelemetry(showError: false);
+//           await ref.read(khataViewModelProvider.notifier).loadEntries();
+//           await _restoreMotorSessionFromKhata();
+//         });
+//       }
+//     }
+//   }
+//
+//   @override
+//   void didChangeDependencies() {
+//     super.didChangeDependencies();
+//
+//     if (didSetupDevice) return;
+//     didSetupDevice = true;
+//
+//     final args = ModalRoute.of(context)?.settings.arguments;
+//
+//     if (args is Map) {
+//       userId = args["userId"]?.toString();
+//
+//       final rawDeviceId = args["deviceId"]?.toString().trim();
+//       if (rawDeviceId != null && rawDeviceId.isNotEmpty) {
+//         deviceId = rawDeviceId;
+//       }
+//
+//       final rawDeviceName = args["deviceName"]?.toString().trim();
+//       if (rawDeviceName != null && rawDeviceName.isNotEmpty) {
+//         deviceName = rawDeviceName;
+//       }
+//     }
+//
+//     final widgetDeviceId = widget.deviceId?.trim();
+//
+//     if (!hasDevice && widgetDeviceId != null && widgetDeviceId.isNotEmpty) {
+//       deviceId = widgetDeviceId;
+//     }
+//
+//     if (hasDevice) {
+//       Future.microtask(() async {
+//         await loadTelemetry();
+//         await ref.read(khataViewModelProvider.notifier).loadEntries();
+//         await _restoreMotorSessionFromKhata();
+//       });
+//
+//       telemetryTimer?.cancel();
+//       telemetryTimer = Timer.periodic(
+//         const Duration(seconds: 5),
+//             (_) => loadTelemetry(showError: false),
+//       );
+//     }
+//   }
+//
+//   @override
+//   void dispose() {
+//     WidgetsBinding.instance.removeObserver(this);
+//     pulseController.dispose();
+//     customerNameController.dispose();
+//     customerNameFocusNode.dispose();
+//     telemetryTimer?.cancel();
+//     runTimer?.cancel();
+//     super.dispose();
+//   }
+//
+//   int _toInt(dynamic value) {
+//     if (value == null) return 0;
+//     if (value is int) return value;
+//     if (value is double) return value.toInt();
+//     if (value is num) return value.toInt();
+//     return int.tryParse(value.toString()) ?? 0;
+//   }
+//
+//   bool isDeviceOnline(dynamic latest) {
+//     if (!hasDevice) return false;
+//     if (latest == null) return false;
+//
+//     final live = _toInt(latest.isLive) == 1;
+//     final fresh = latest.isFresh(withinSeconds: 20);
+//
+//     return live && fresh;
+//   }
+//
+//
+//   bool isMotorRunning(dynamic latest) {
+//     if (!hasDevice) return false;
+//     if (!isDeviceOnline(latest)) return false;
+//
+//     final statusCode = _toInt(latest.statusCode);
+//
+//     return statusCode == 1 || statusCode == 2;
+//   }
+//
+//   Future<void> loadTelemetry({bool showError = false}) async {
+//     if (!hasDevice) return;
+//     if (isTelemetryLoading) return;
+//
+//     final isFirstLoad = !firstTelemetryLoaded;
+//
+//     isTelemetryLoading = true;
+//
+//     try {
+//       await ref.read(telemetryViewModelProvider.notifier).loadLatest(
+//         deviceId!,
+//         showLoading: isFirstLoad,
+//       );
+//
+//       if (mounted) {
+//         final latest = ref.read(telemetryViewModelProvider).latest;
+//         _handleFreshVfdTransition(latest);
+//       }
+//     } catch (e) {
+//       if (showError) {
+//         showMessage(
+//           "Telemetry failed: ${friendlyError(e.toString())}",
+//           true,
+//           seconds: 8,
+//         );
+//       }
+//     } finally {
+//       isTelemetryLoading = false;
+//
+//       if (mounted && isFirstLoad) {
+//         setState(() {
+//           firstTelemetryLoaded = true;
+//         });
+//       }
+//     }
+//   }
+//
+//   void _handleFreshVfdTransition(dynamic latest) {
+//     if (!mounted) return;
+//     if (!isDeviceOnline(latest)) return;
+//
+//     final currentRunning = isMotorRunning(latest);
+//     final previousRunning = _lastFreshVfdRunning;
+//
+//     // Always keep the latest fresh physical state as the baseline.
+//     _lastFreshVfdRunning = currentRunning;
+//
+//     // First fresh reading only establishes the baseline.
+//     if (previousRunning == null) {
+//       return;
+//     }
+//
+//     // Same physical state: nothing changed.
+//     if (previousRunning == currentRunning) {
+//       return;
+//     }
+//
+//     // ON/OFF changes caused by our own pending command are handled by the
+//     // existing VFD confirmation flow, not as unexpected interruptions.
+//     if (isWaitingForVfdConfirmation) {
+//       return;
+//     }
+//
+//     // ---------------------------------------------------------------
+//     // Unexpected physical ON -> OFF
+//     // ---------------------------------------------------------------
+//     if (previousRunning && !currentRunning) {
+//       _stopLocalTimer(resetStart: false);
+//
+//       setState(() {
+//         _vfdSessionInterrupted = true;
+//         _vfdRestartedAfterInterruption = false;
+//       });
+//
+//       return;
+//     }
+//
+//     // ---------------------------------------------------------------
+//     // Unexpected physical OFF -> ON
+//     // ---------------------------------------------------------------
+//     if (!previousRunning &&
+//         currentRunning &&
+//         _vfdSessionInterrupted) {
+//       // Do not restart the old timer. The old session has been interrupted
+//       // and resuming it would count VFD downtime as motor runtime.
+//       _stopLocalTimer(resetStart: false);
+//
+//       setState(() {
+//         _vfdRestartedAfterInterruption = true;
+//       });
+//     }
+//   }
+//
+//   Future<bool> _waitForVfdConfirmation({
+//     required bool expectedOn,
+//     required int telemetryTimestampBeforeCommand,
+//   }) async {
+//     final deadline = DateTime.now().add(
+//       const Duration(seconds: 20),
+//     );
+//
+//     int lastCheckedTimestamp = telemetryTimestampBeforeCommand;
+//
+//     while (mounted && DateTime.now().isBefore(deadline)) {
+//       await loadTelemetry(showError: false);
+//
+//       if (!mounted) return false;
+//
+//       final latest = ref.read(telemetryViewModelProvider).latest;
+//
+//       if (!isDeviceOnline(latest)) {
+//         await Future.delayed(
+//           const Duration(milliseconds: 400),
+//         );
+//         continue;
+//       }
+//
+//       final telemetryTimestamp = _toInt(latest?.timestamp);
+//
+//       // Old telemetry ko confirmation ke liye use nahi karna.
+//       if (telemetryTimestamp <= telemetryTimestampBeforeCommand ||
+//           telemetryTimestamp <= lastCheckedTimestamp) {
+//         await Future.delayed(
+//           const Duration(milliseconds: 400),
+//         );
+//         continue;
+//       }
+//
+//       lastCheckedTimestamp = telemetryTimestamp;
+//
+//       final confirmedMotorState = isMotorRunning(latest);
+//
+//       // First NEW VFD response is enough.
+//       if (confirmedMotorState == expectedOn) {
+//         return true;
+//       }
+//
+//       await Future.delayed(
+//         const Duration(milliseconds: 400),
+//       );
+//     }
+//
+//     return false;
+//   }
+//
+//   KhataEntryModel? _latestOpenKhataForCurrentDevice() {
+//     if (!hasDevice) return null;
+//
+//     final entries = ref.read(khataViewModelProvider).entries;
+//
+//     KhataEntryModel? latestOpen;
+//
+//     for (final entry in entries) {
+//       if (entry.deviceId.trim() != deviceId!.trim()) continue;
+//       if (!entry.isOpen) continue;
+//       if (entry.startTime == null) continue;
+//       if (entry.endTime != null) continue;
+//
+//       if (latestOpen == null ||
+//           entry.startTime!.isAfter(latestOpen.startTime!)) {
+//         latestOpen = entry;
+//       }
+//     }
+//
+//     return latestOpen;
+//   }
+//
+//   Future<void> _restoreMotorSessionFromKhata() async {
+//     if (!hasDevice || isRestoringMotorSession) return;
+//
+//     isRestoringMotorSession = true;
+//
+//     try {
+//       final restoredEntry = _latestOpenKhataForCurrentDevice();
+//       final latest = ref.read(telemetryViewModelProvider).latest;
+//
+//       final hasFreshTelemetry = isDeviceOnline(latest);
+//       final vfdSaysRunning =
+//       hasFreshTelemetry ? isMotorRunning(latest) : false;
+//
+//       if (restoredEntry != null) {
+//         activeKhataEntry = restoredEntry;
+//
+//         serverMotorStartedAt = restoredEntry.startTime;
+//         serverMotorStoppedAt = restoredEntry.endTime;
+//
+//         final restoredCustomer = (restoredEntry.customerName ?? "").trim();
+//         if (restoredCustomer.isNotEmpty &&
+//             customerNameController.text.trim().isEmpty) {
+//           customerNameController.text = restoredCustomer;
+//           customerNameController.selection = TextSelection.collapsed(
+//             offset: customerNameController.text.length,
+//           );
+//         }
+//
+//         // An open backend session is authoritative for elapsed time.
+//         // Even if the app was killed or the phone slept, elapsed time is
+//         // recalculated from this ORIGINAL database timestamp. The periodic
+//         // Timer object is recreated, but the elapsed motor time never starts
+//         // again from zero.
+//         if (!hasFreshTelemetry || vfdSaysRunning) {
+//           _startLocalTimer(startedAt: restoredEntry.startTime);
+//         }
+//       } else {
+//         activeKhataEntry = null;
+//
+//         // If VFD is already running but there is no open app/Khata session,
+//         // do not invent an ON timestamp from the phone clock.
+//         // Wait for an authoritative server/database startTime.
+//         if (vfdSaysRunning && motorStartedAt == null) {
+//           _stopLocalTimer();
+//         }
+//       }
+//
+//       // Fresh OFF telemetry with an OPEN server/Khata session means the
+//       // physical VFD stopped without the normal app OFF finalization.
+//       // Freeze the displayed runtime; do not reset it to 00:00:00.
+//       if (hasFreshTelemetry && !vfdSaysRunning) {
+//         _stopLocalTimer(resetStart: false);
+//
+//         if (restoredEntry != null) {
+//           if (mounted) {
+//             setState(() {
+//               _vfdSessionInterrupted = true;
+//               _vfdRestartedAfterInterruption = false;
+//             });
+//           } else {
+//             _vfdSessionInterrupted = true;
+//             _vfdRestartedAfterInterruption = false;
+//           }
+//         }
+//       }
+//     } finally {
+//       isRestoringMotorSession = false;
+//
+//       if (mounted) {
+//         setState(() {
+//           didRestoreMotorSession = true;
+//         });
+//       } else {
+//         didRestoreMotorSession = true;
+//       }
+//     }
+//   }
+//
+//   void _startLocalTimer({DateTime? startedAt}) {
+//     // Never create an ON timestamp from the phone clock.
+//     if (startedAt == null) {
+//       return;
+//     }
+//
+//     motorStartedAt = startedAt;
+//
+//     runTimer?.cancel();
+//     _refreshRunSeconds();
+//
+//     runTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+//       _refreshRunSeconds();
+//     });
+//   }
+//
+//   void _refreshRunSeconds() {
+//     final startedAt = motorStartedAt;
+//     if (!mounted || startedAt == null) return;
+//
+//     final elapsed =
+//         DateTime.now().toUtc().difference(startedAt.toUtc()).inSeconds;
+//     final safeElapsed = elapsed < 0 ? 0 : elapsed;
+//
+//     if (safeElapsed != runSeconds) {
+//       setState(() {
+//         runSeconds = safeElapsed;
+//       });
+//     }
+//   }
+//
+//   void _stopLocalTimer({bool resetStart = true}) {
+//     runTimer?.cancel();
+//     runTimer = null;
+//
+//     if (resetStart) {
+//       motorStartedAt = null;
+//     }
+//   }
+//
+//   String get runningTime {
+//     final seconds = runSeconds < 0 ? 0 : runSeconds;
+//     final h = (seconds ~/ 3600).toString().padLeft(2, "0");
+//     final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, "0");
+//     final s = (seconds % 60).toString().padLeft(2, "0");
+//     return "$h:$m:$s";
+//   }
+//   DateTime _toPakistanServerTime(DateTime value) {
+//     DateTime utcTime;
+//
+//     if (value.isUtc) {
+//       // Server value already contains proper UTC information.
+//       utcTime = value;
+//     } else {
+//       // Server returned UTC date/time without Z or timezone offset.
+//       // Rebuild the same components as UTC instead of converting local time.
+//       utcTime = DateTime.utc(
+//         value.year,
+//         value.month,
+//         value.day,
+//         value.hour,
+//         value.minute,
+//         value.second,
+//         value.millisecond,
+//         value.microsecond,
+//       );
+//     }
+//
+//     return utcTime.add(
+//       const Duration(hours: 5),
+//     );
+//   }
+//
+//   String _formatServerDateTime(DateTime? value) {
+//     if (value == null) return "--";
+//
+//     final pakistanTime = _toPakistanServerTime(value);
+//
+//     final year =
+//     pakistanTime.year.toString().padLeft(4, "0");
+//
+//     final month =
+//     pakistanTime.month.toString().padLeft(2, "0");
+//
+//     final day =
+//     pakistanTime.day.toString().padLeft(2, "0");
+//
+//     final hour24 = pakistanTime.hour;
+//
+//     final hour12 = hour24 == 0
+//         ? 12
+//         : hour24 > 12
+//         ? hour24 - 12
+//         : hour24;
+//
+//     final hour =
+//     hour12.toString().padLeft(2, "0");
+//
+//     final minute =
+//     pakistanTime.minute.toString().padLeft(2, "0");
+//
+//     final second =
+//     pakistanTime.second.toString().padLeft(2, "0");
+//
+//     final period =
+//     hour24 >= 12 ? "PM" : "AM";
+//
+//     return "$year-$month-$day  "
+//         "$hour:$minute:$second $period PKT";
+//   }
+//
+//   int _serverRunDurationSeconds({
+//     required DateTime? startTime,
+//     required DateTime? endTime,
+//   }) {
+//     if (startTime == null || endTime == null) {
+//       return 0;
+//     }
+//
+//     final seconds = endTime
+//         .toUtc()
+//         .difference(startTime.toUtc())
+//         .inSeconds;
+//
+//     return seconds < 0 ? 0 : seconds;
+//   }
+//
+//   String friendlyError(String? error) {
+//     final text = (error ?? "").toLowerCase();
+//
+//     if (text.contains("socket") ||
+//         text.contains("connection") ||
+//         text.contains("network") ||
+//         text.contains("internet") ||
+//         text.contains("host lookup") ||
+//         text.contains("timeout") ||
+//         text.contains("receive timeout") ||
+//         text.contains("connection refused")) {
+//       return "No internet connection. Please check Wi-Fi or mobile data.";
+//     }
+//
+//     if (text.trim().isEmpty) return "Unable to connect. Please try again.";
+//
+//     return error!;
+//   }
+//
+//   String formatValue(
+//       double? value,
+//       String unit, {
+//         int decimals = 1,
+//       }) {
+//     if (!hasDevice) return "-- $unit";
+//     if (value == null) return "-- $unit";
+//     return "${value.toStringAsFixed(decimals)} $unit";
+//   }
+//
+//   Future<void> toggleMotor() async {
+//     if (!hasDevice) {
+//       showMessage("Please select a device first.", true);
+//       return;
+//     }
+//
+//     final latest = ref.read(telemetryViewModelProvider).latest;
+//
+//     final deviceOnline = isDeviceOnline(latest);
+//     final motorRunning = isMotorRunning(latest);
+//     final telemetryTimestampBeforeCommand = _toInt(latest?.timestamp);
+//
+//     if (!deviceOnline) {
+//       showMessage(
+//         "Device is offline. Wait for live telemetry before motor control.",
+//         true,
+//         seconds: 8,
+//       );
+//       return;
+//     }
+//
+//     FocusScope.of(context).unfocus();
+//     HapticFeedback.mediumImpact();
+//
+//     final typedCustomerName = customerNameController.text.trim();
+//     final motorVm = ref.read(motorViewModelProvider.notifier);
+//
+//     // Validate before showing the command spinner.
+//     if (!motorRunning && typedCustomerName.isEmpty) {
+//       showMessage("Customer name is required to start motor.", true);
+//       return;
+//     }
+//
+//     if (mounted) {
+//       setState(() {
+//         motorStateBeforePendingCommand = motorRunning;
+//         isWaitingForVfdConfirmation = true;
+//       });
+//     }
+//
+//     try {
+//       if (motorRunning) {
+//         final stoppedLog = await motorVm.stopMotor(
+//           deviceId: deviceId!,
+//           customerName: activeKhataEntry?.customerName ??
+//               (typedCustomerName.isEmpty ? "Mobile App" : typedCustomerName),
+//         );
+//
+//         final updatedMotorState = ref.read(motorViewModelProvider);
+//
+//         if (updatedMotorState.error != null) {
+//           showMessage(updatedMotorState.error!, true, seconds: 10);
+//           return;
+//         }
+//
+//         final endTime = stoppedLog?.endTime;
+//
+//         if (endTime != null) {
+//           if (mounted) {
+//             setState(() {
+//               serverMotorStoppedAt = endTime;
+//             });
+//           } else {
+//             serverMotorStoppedAt = endTime;
+//           }
+//         }
+//
+//         // Do NOT close Khata or show OFF just because the stop API returned.
+//         // Billing/timer stop only after VFD telemetry itself confirms OFF.
+//         final vfdConfirmedOff = await _waitForVfdConfirmation(
+//           expectedOn: false,
+//           telemetryTimestampBeforeCommand: telemetryTimestampBeforeCommand,
+//         );
+//
+//         if (!vfdConfirmedOff) {
+//           showMessage(
+//             "Stop command was sent, but OFF confirmation was not received from VFD telemetry.",
+//             true,
+//             seconds: 10,
+//           );
+//           return;
+//         }
+//
+//         // VFD is physically OFF now. Stop the HOME timer immediately.
+//         // Khata finalization is a separate server operation and must never
+//         // keep the physical motor timer running.
+//         _stopLocalTimer();
+//
+//         if (endTime == null) {
+//           showMessage(
+//             "Motor is OFF, but server end time is missing.",
+//             true,
+//             seconds: 12,
+//           );
+//           return;
+//         }
+//
+//         final finalServerDuration = _serverRunDurationSeconds(
+//           startTime: serverMotorStartedAt,
+//           endTime: endTime,
+//         );
+//
+//         if (mounted) {
+//           setState(() {
+//             serverMotorStoppedAt = endTime;
+//             runSeconds = finalServerDuration;
+//           });
+//         } else {
+//           serverMotorStoppedAt = endTime;
+//           runSeconds = finalServerDuration;
+//         }
+//
+//         // Do not rely only on the in-memory activeKhataEntry.
+//         // It can be lost after navigation/app resume/rebuild.
+//         // Reload from server and recover the real open entry if needed.
+//         await ref.read(khataViewModelProvider.notifier).loadEntries();
+//
+//         final entryToClose =
+//             activeKhataEntry ?? _latestOpenKhataForCurrentDevice();
+//
+//         if (entryToClose == null) {
+//           activeKhataEntry = null;
+//
+//           showMessage(
+//             "Motor stopped. No open Khata session was found to finalize.",
+//             false,
+//           );
+//           return;
+//         }
+//
+//         final closedEntry =
+//         await ref.read(khataViewModelProvider.notifier).closeMotorKhataSession(
+//           entry: entryToClose,
+//           endTime: endTime,
+//         );
+//
+//         // IMPORTANT:
+//         // Never forget the open entry when the close API failed.
+//         // Previous code set activeKhataEntry=null even when ViewModel
+//         // returned null, leaving backend is_open=true forever.
+//         if (closedEntry == null) {
+//           activeKhataEntry = entryToClose;
+//
+//           final khataError = ref.read(khataViewModelProvider).error;
+//
+//           showMessage(
+//             "Motor is OFF, but Khata finalization failed: "
+//                 "${khataError ?? "Unknown Khata close error"}",
+//             true,
+//             seconds: 14,
+//           );
+//           return;
+//         }
+//
+//         activeKhataEntry = null;
+//
+//         if (mounted) {
+//           setState(() {
+//             _vfdSessionInterrupted = false;
+//             _vfdRestartedAfterInterruption = false;
+//           });
+//         } else {
+//           _vfdSessionInterrupted = false;
+//           _vfdRestartedAfterInterruption = false;
+//         }
+//
+//         // Reload the authoritative finalized values:
+//         // ended_at, is_open=false, run_hours and recalculated bill.
+//         await ref.read(khataViewModelProvider.notifier).loadEntries();
+//
+//         final stillOpen = _latestOpenKhataForCurrentDevice();
+//
+//         if (stillOpen != null &&
+//             stillOpen.id == closedEntry.id) {
+//           activeKhataEntry = stillOpen;
+//
+//           showMessage(
+//             "Motor is OFF, but backend still reports this Khata as open.",
+//             true,
+//             seconds: 14,
+//           );
+//           return;
+//         }
+//
+//         showMessage(
+//           "Motor stopped. Khata finalized: "
+//               "${closedEntry.runHours.toStringAsFixed(2)} hr.",
+//           false,
+//         );
+//         return;
+//       }
+//
+//       final startedLog = await motorVm.startMotor(
+//         deviceId: deviceId!,
+//         customerName: typedCustomerName,
+//       );
+//       if (startedLog != null && mounted) {
+//         setState(() {
+//           activeTriggerType = startedLog.triggerType;
+//         });
+//       }
+//
+//       final motorCommandStartedAt = startedLog?.startTime;
+//
+//       if (motorCommandStartedAt != null) {
+//         if (mounted) {
+//           setState(() {
+//             serverMotorStartedAt = motorCommandStartedAt;
+//             serverMotorStoppedAt = null;
+//             _vfdSessionInterrupted = false;
+//             _vfdRestartedAfterInterruption = false;
+//           });
+//         } else {
+//           serverMotorStartedAt = motorCommandStartedAt;
+//           serverMotorStoppedAt = null;
+//           _vfdSessionInterrupted = false;
+//           _vfdRestartedAfterInterruption = false;
+//         }
+//       }
+//
+//       final updatedMotorState = ref.read(motorViewModelProvider);
+//
+//       if (updatedMotorState.error != null) {
+//         showMessage(updatedMotorState.error!, true, seconds: 10);
+//         return;
+//       }
+//
+//       // Do NOT open Khata or show ON just because the start API returned.
+//       // Billing/timer begin only after VFD telemetry itself confirms ON.
+//       final vfdConfirmedOn = await _waitForVfdConfirmation(
+//         expectedOn: true,
+//         telemetryTimestampBeforeCommand: telemetryTimestampBeforeCommand,
+//       );
+//
+//       if (!vfdConfirmedOn) {
+//         showMessage(
+//           "Start command was sent, but ON confirmation was not received from VFD telemetry.",
+//           true,
+//           seconds: 10,
+//         );
+//         return;
+//       }
+//
+//       // VFD has confirmed ON, so the motor timer must run even if
+//       // Khata creation fails. Billing failure must never make the UI
+//       // pretend the motor is stopped.
+//       if (mounted) {
+//         setState(() {
+//           runSeconds = 0;
+//         });
+//       }
+//
+//       if (motorCommandStartedAt == null) {
+//         showMessage(
+//           "Motor is ON, but server start time is missing.",
+//           true,
+//           seconds: 12,
+//         );
+//         return;
+//       }
+//
+//       _startLocalTimer(startedAt: motorCommandStartedAt);
+//
+//       // A real MotorLog UUID is mandatory for an open Khata session.
+//       // run_hours is intentionally 0 while the motor is still running.
+//       if (startedLog == null) {
+//         showMessage(
+//           "Motor is ON, but start API returned no MotorLog. Khata was not created.",
+//           true,
+//           seconds: 12,
+//         );
+//         return;
+//       }
+//
+//       final motorLogId = startedLog.id?.trim() ?? "";
+//
+//       if (motorLogId.isEmpty) {
+//         showMessage(
+//           "Motor is ON, but MotorLog ID is missing from the start response. "
+//               "Khata was not created. Check POST /motor/$deviceId/start response.",
+//           true,
+//           seconds: 14,
+//         );
+//         return;
+//       }
+//
+//       activeKhataEntry =
+//       await ref.read(khataViewModelProvider.notifier).startMotorKhataSession(
+//         customerName: typedCustomerName,
+//         deviceId: deviceId!,
+//         motorLogId: motorLogId,
+//         startTime: motorCommandStartedAt,
+//       );
+//
+//       if (activeKhataEntry == null) {
+//         final khataError = ref.read(khataViewModelProvider).error;
+//
+//         showMessage(
+//           "Motor is ON, but Khata was not created: "
+//               "${khataError ?? "Unknown Khata API error"}",
+//           true,
+//           seconds: 14,
+//         );
+//         return;
+//       }
+//
+//       await ref.read(khataViewModelProvider.notifier).loadEntries();
+//
+//       showMessage("Motor started. Khata session opened.", false);
+//     } catch (e) {
+//       showMessage(
+//         "Motor action failed: ${friendlyError(e.toString())}",
+//         true,
+//         seconds: 12,
+//       );
+//     } finally {
+//       if (mounted) {
+//         setState(() {
+//           isWaitingForVfdConfirmation = false;
+//           motorStateBeforePendingCommand = null;
+//         });
+//       } else {
+//         isWaitingForVfdConfirmation = false;
+//         motorStateBeforePendingCommand = null;
+//       }
+//     }
+//   }
+//
+//   void showMessage(String text, bool isError, {int seconds = 6}) {
+//     if (!mounted) return;
+//
+//     ScaffoldMessenger.of(context)
+//       ..clearSnackBars()
+//       ..showSnackBar(
+//         SnackBar(
+//           duration: Duration(seconds: isError ? seconds : 4),
+//           behavior: SnackBarBehavior.floating,
+//           margin: const EdgeInsets.all(16),
+//           shape: RoundedRectangleBorder(
+//             borderRadius: BorderRadius.circular(14),
+//           ),
+//           backgroundColor: isError ? AppColors.error : AppColors.green,
+//           content: Text(
+//             isError ? friendlyError(text) : text,
+//             style: const TextStyle(
 //               color: AppColors.white,
-//               fontSize: 18,
-//               fontWeight: FontWeight.w900,
+//               fontWeight: FontWeight.w800,
 //             ),
 //           ),
-//           const SizedBox(height: 12),
-//           Row(
-//             children: [
-//               Container(
-//                 height: 10,
-//                 width: 10,
-//                 decoration: BoxDecoration(
-//                   color: liveColor,
-//                   shape: BoxShape.circle,
+//         ),
+//       );
+//   }
+//
+//   List<String> customerSuggestions() {
+//     if (!hasDevice) return <String>[];
+//
+//     final khataState = ref.watch(khataViewModelProvider);
+//     final names = <String>[];
+//     final seen = <String>{};
+//
+//     // Newest customers first. Duplicate names are removed case-insensitively.
+//     for (final entry in khataState.entries.reversed) {
+//       final name = entry.customerName?.trim();
+//       if (name == null || name.isEmpty) continue;
+//
+//       final key = name.toLowerCase();
+//       if (seen.add(key)) {
+//         names.add(name);
+//       }
+//     }
+//
+//     return names.take(20).toList();
+//   }
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final latest = ref.watch(
+//       telemetryViewModelProvider.select((state) => state.latest),
+//     );
+//
+//     final motorLoading = ref.watch(
+//       motorViewModelProvider.select((state) => state.isLoading),
+//     );
+//
+//     final motorButtonLoading =
+//         hasDevice && (motorLoading || isWaitingForVfdConfirmation);
+//
+//     final checkingDevice = hasDevice && !firstTelemetryLoaded;
+//
+//     final effectiveLatest = hasDevice && firstTelemetryLoaded ? latest : null;
+//
+//     final deviceOnline = checkingDevice ? false : isDeviceOnline(effectiveLatest);
+//     final telemetryMotorRunning =
+//     checkingDevice ? false : isMotorRunning(effectiveLatest);
+//
+//     final motorRunning = isWaitingForVfdConfirmation &&
+//         motorStateBeforePendingCommand != null
+//         ? motorStateBeforePendingCommand!
+//         : telemetryMotorRunning;
+//
+//     final displayLatest = deviceOnline ? effectiveLatest : null;
+//
+//     if (motorRunning &&
+//         runTimer == null &&
+//         !isWaitingForVfdConfirmation &&
+//         didRestoreMotorSession &&
+//         !_vfdSessionInterrupted &&
+//         !_vfdRestartedAfterInterruption) {
+//       WidgetsBinding.instance.addPostFrameCallback((_) {
+//         if (mounted && runTimer == null) {
+//           _startLocalTimer(
+//             startedAt: activeKhataEntry?.startTime ?? motorStartedAt,
+//           );
+//         }
+//       });
+//     }
+//
+//     // Never reset the run timer just because telemetry becomes stale while
+//     // the app is backgrounded. Stop it only when fresh VFD telemetry says OFF.
+//     if (deviceOnline &&
+//         !telemetryMotorRunning &&
+//         runTimer != null &&
+//         !isWaitingForVfdConfirmation) {
+//       WidgetsBinding.instance.addPostFrameCallback((_) {
+//         if (mounted && runTimer != null) {
+//           // Physical VFD is OFF. Freeze the timer at its last displayed
+//           // value. Do not reset and do not invent a server end timestamp.
+//           _stopLocalTimer(resetStart: false);
+//
+//           if (!_vfdSessionInterrupted) {
+//             setState(() {
+//               _vfdSessionInterrupted = true;
+//               _vfdRestartedAfterInterruption = false;
+//             });
+//           }
+//         }
+//       });
+//     }
+//
+//     final width = MediaQuery.of(context).size.width;
+//
+//     final isVerySmall = width < 360;
+//     final isTablet = width >= 650;
+//     final isLarge = width >= 1000;
+//
+//     final horizontalPadding = isLarge
+//         ? 38.0
+//         : isTablet
+//         ? 30.0
+//         : 16.0;
+//
+//     final crossAxisCount = isLarge
+//         ? 4
+//         : isTablet
+//         ? 3
+//         : 2;
+//
+//     final childAspectRatio = isLarge
+//         ? 1.36
+//         : isTablet
+//         ? 1.22
+//         : 1.02;
+//
+//     final buttonSize = isLarge
+//         ? 238.0
+//         : isTablet
+//         ? 226.0
+//         : isVerySmall
+//         ? 176.0
+//         : 196.0;
+//
+//     final resolvedDisplayName = deviceName != null && deviceName!.isNotEmpty
+//         ? deviceName!
+//         : hasDevice
+//         ? deviceId!
+//         : "Smart Motor Controller";
+//
+//     return Scaffold(
+//       backgroundColor: AppColors.darkBgSoft,
+//       drawer: hasDevice ? ProfessionalDrawer(deviceId: deviceId!) : null,
+//       appBar: SmartWellHomeAppBar(
+//         hasDevice: hasDevice,
+//         deviceOnline: deviceOnline,
+//         onSelectDevice: () {
+//           Navigator.pushReplacementNamed(context, AppRoutes.devices);
+//         },
+//       ),
+//       body: SafeArea(
+//         child: RefreshIndicator(
+//           color: AppColors.primary,
+//           backgroundColor: AppColors.cardDark,
+//           onRefresh: () async {
+//             if (hasDevice) {
+//               await loadTelemetry(showError: true);
+//               await ref.read(khataViewModelProvider.notifier).loadEntries();
+//               await _restoreMotorSessionFromKhata();
+//             } else {
+//               showMessage("Please select a device first.", true);
+//             }
+//           },
+//           child: SingleChildScrollView(
+//             physics: const AlwaysScrollableScrollPhysics(
+//               parent: BouncingScrollPhysics(),
+//             ),
+//             padding: EdgeInsets.symmetric(
+//               horizontal: horizontalPadding,
+//               vertical: 18,
+//             ),
+//             child: Center(
+//               child: ConstrainedBox(
+//                 constraints: const BoxConstraints(maxWidth: 1080),
+//                 child: Column(
+//                   crossAxisAlignment: CrossAxisAlignment.stretch,
+//                   children: [
+//                     // SmartDeviceHeaderCard(
+//                     //   hasDevice: hasDevice,
+//                     //   deviceOnline: deviceOnline,
+//                     //   motorRunning: motorRunning,
+//                     //   displayName: resolvedDisplayName,
+//                     //   deviceId: deviceId,
+//                     // ),
+//                     SmartDeviceHeaderCard(
+//                       hasDevice: hasDevice,
+//                       deviceOnline: deviceOnline,
+//                       motorRunning: motorRunning,
+//                       displayName: resolvedDisplayName,
+//                       deviceId: deviceId,
+//                       triggerType: activeTriggerType,
+//                     ),
+//                     // if (!hasDevice) ...[
+//                     //   const SizedBox(height: 12),
+//                     //   NoDeviceProfessionalNotice(
+//                     //     onSelectDevice: () {
+//                     //       Navigator.pushReplacementNamed(
+//                     //         context,
+//                     //         AppRoutes.devices,
+//                     //       );
+//                     //     },
+//                     //   ),
+//                     // ],
+//                     // if (hasDevice && !deviceOnline) ...[
+//                     //   const SizedBox(height: 12),
+//                     //   // DeviceOfflineNotice(
+//                     //   //   onRetry: () => loadTelemetry(showError: true),
+//                     //   // ),
+//                     // ],
+//                     // if (hasDevice && deviceOnline) ...[
+//                     //   const SizedBox(height: 12),
+//                     //   DeviceOnlineNotice(
+//                     //     motorRunning: motorRunning,
+//                     //   ),
+//                     // ],
+//                     const SizedBox(height: 18),
+//                     CustomerNameInputCard(
+//                       controller: customerNameController,
+//                       focusNode: customerNameFocusNode,
+//                       suggestions: customerSuggestions(),
+//                       enabled: hasDevice && deviceOnline,
+//                     ),
+//                     const SizedBox(height: 26),
+//                     Center(
+//                       child: GestureDetector(
+//                         onTap: motorButtonLoading ? null : toggleMotor,
+//                         child: AnimatedBuilder(
+//                           animation: pulseAnimation,
+//                           builder: (context, child) {
+//                             final scale = motorButtonLoading
+//                                 ? 1.0
+//                                 : motorRunning
+//                                 ? 1.0 + ((pulseAnimation.value - 1.0) * 0.28)
+//                                 : 1.0;
+//
+//                             return Transform.scale(
+//                               scale: scale,
+//                               child: child,
+//                             );
+//                           },
+//                           child: MotorCommandButton(
+//                             hasDevice: hasDevice,
+//                             deviceOnline: deviceOnline,
+//                             isOn: motorRunning,
+//                             loading: motorButtonLoading,
+//                             size: buttonSize,
+//                           ),
+//                         ),
+//                       ),
+//                     ),
+//                     const SizedBox(height: 18),
+//                     MotorRunStatusCard(
+//                       hasDevice: hasDevice,
+//                       deviceOnline: deviceOnline,
+//                       isOn: motorRunning,
+//                       waitingForVfd: isWaitingForVfdConfirmation,
+//                       runningTime: runningTime,
+//                       serverStartTime:
+//                       _formatServerDateTime(serverMotorStartedAt),
+//                       serverEndTime:
+//                       _formatServerDateTime(serverMotorStoppedAt),
+//                       hasServerStartTime: serverMotorStartedAt != null,
+//                       hasServerEndTime: serverMotorStoppedAt != null,
+//                       vfdSessionInterrupted: _vfdSessionInterrupted,
+//                       vfdRestartedAfterInterruption:
+//                       _vfdRestartedAfterInterruption,
+//                     ),
+//                     const SizedBox(height: 22),
+//                     ParameterGridSection(
+//                       crossAxisCount: crossAxisCount,
+//                       childAspectRatio: childAspectRatio,
+//                       metrics: [
+//                         ParameterMetric(
+//                           icon: Icons.sync_rounded,
+//                           title: "Frequency",
+//                           value: formatValue(displayLatest?.freq, "Hz"),
+//                           highlight: true,
+//                         ),
+//                         ParameterMetric(
+//                           icon: Icons.bolt_rounded,
+//                           title: "Voltage",
+//                           value: formatValue(displayLatest?.voltage, "V"),
+//                         ),
+//                         ParameterMetric(
+//                           icon: Icons.flash_on_rounded,
+//                           title: "Current",
+//                           value: formatValue(displayLatest?.current, "A"),
+//                         ),
+//                         ParameterMetric(
+//                           icon: Icons.power_rounded,
+//                           title: "Power",
+//                           value: formatValue(displayLatest?.power, "kW"),
+//                         ),
+//                         ParameterMetric(
+//                           icon: Icons.speed_rounded,
+//                           title: "Load",
+//                           value: formatValue(
+//                             displayLatest?.powerPercent,
+//                             "%",
+//                           ),
+//                         ),
+//                         ParameterMetric(
+//                           icon: Icons.rotate_right_rounded,
+//                           title: "Motor Speed",
+//                           value: formatValue(
+//                             displayLatest?.motorSpeed,
+//                             "RPM",
+//                           ),
+//                         ),
+//                         ParameterMetric(
+//                           icon: Icons.battery_charging_full_rounded,
+//                           title: "DC Bus",
+//                           value: formatValue(displayLatest?.dcbus, "V"),
+//                         ),
+//                         ParameterMetric(
+//                           icon: Icons.electric_meter_rounded,
+//                           title: "Energy",
+//                           value: formatValue(
+//                             displayLatest?.energyIn,
+//                             "kWh",
+//                           ),
+//                         ),
+//                       ],
+//                     ),
+//                   ],
 //                 ),
 //               ),
-//               const SizedBox(width: 8),
-//               Expanded(
-//                 child: Text(
-//                   liveText,
+//             ),
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+// }
+//
+// class SmartWellHomeAppBar extends StatelessWidget
+//     implements PreferredSizeWidget {
+//   final bool hasDevice;
+//   final bool deviceOnline;
+//   final VoidCallback onSelectDevice;
+//
+//   const SmartWellHomeAppBar({
+//     super.key,
+//     required this.hasDevice,
+//     required this.deviceOnline,
+//     required this.onSelectDevice,
+//   });
+//
+//   @override
+//   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final statusText = !hasDevice
+//         ? "No device selected"
+//         : deviceOnline
+//         ? "Device online"
+//         : "Waiting for device";
+//
+//     final statusColor = !hasDevice
+//         ? AppColors.white.withOpacity(0.55)
+//         : deviceOnline
+//         ? AppColors.green
+//         : AppColors.warning;
+//
+//     return AppBar(
+//       backgroundColor: AppColors.primaryDark.withOpacity(0.96),
+//       elevation: 2,
+//       shadowColor: Colors.black.withOpacity(0.18),
+//       centerTitle: false,
+//       automaticallyImplyLeading: hasDevice,
+//       iconTheme: const IconThemeData(color: AppColors.white),
+//       titleSpacing: 18,
+//       title: Row(
+//         children: [
+//           Container(
+//             height: 42,
+//             width: 42,
+//             decoration: BoxDecoration(
+//               borderRadius: BorderRadius.circular(14),
+//               gradient: LinearGradient(
+//                 begin: Alignment.topLeft,
+//                 end: Alignment.bottomRight,
+//                 colors: [
+//                   AppColors.primaryDark,
+//                   AppColors.primary,
+//                 ],
+//               ),
+//             ),
+//             child: const Icon(
+//               Icons.electric_bolt_rounded,
+//               color: AppColors.white,
+//               size: 24,
+//             ),
+//           ),
+//           const SizedBox(width: 14),
+//           Expanded(
+//             child: Column(
+//               crossAxisAlignment: CrossAxisAlignment.start,
+//               mainAxisSize: MainAxisSize.min,
+//               children: [
+//                 const Text(
+//                   "AabNex",
 //                   maxLines: 1,
 //                   overflow: TextOverflow.ellipsis,
 //                   style: TextStyle(
-//                     color: liveColor,
+//                     color: AppColors.white,
+//                     fontSize: 20,
 //                     fontWeight: FontWeight.w900,
 //                   ),
 //                 ),
-//               ),
-//               Text(
-//                 "Code ${snapshot.statusCode ?? "-"}",
-//                 style: TextStyle(
-//                   color: AppColors.white.withOpacity(0.56),
-//                   fontWeight: FontWeight.w700,
+//                 const SizedBox(height: 2),
+//                 Text(
+//                   statusText,
+//                   maxLines: 1,
+//                   overflow: TextOverflow.ellipsis,
+//                   style: TextStyle(
+//                     color: statusColor,
+//                     fontSize: 11.5,
+//                     fontWeight: FontWeight.w800,
+//                   ),
 //                 ),
+//               ],
+//             ),
+//           ),
+//         ],
+//       ),
+//       actions: [
+//         Padding(
+//           padding: const EdgeInsets.only(right: 10),
+//           child: IconButton(
+//             tooltip: "Select Device",
+//             onPressed: onSelectDevice,
+//             icon: Container(
+//               padding: const EdgeInsets.all(10),
+//               decoration: BoxDecoration(
+//                 color: AppColors.cardDark.withOpacity(0.94),
+//                 borderRadius: BorderRadius.circular(14),
+//                 border: Border.all(color: AppColors.white.withOpacity(0.14)),
 //               ),
-//             ],
-//           ),
-//           const SizedBox(height: 14),
-//           Text(
-//             "Device Name: $displayName",
-//             style: TextStyle(
-//               color: AppColors.white.withOpacity(0.82),
-//               fontWeight: FontWeight.w700,
-//               fontSize: 14,
+//               child: const Icon(
+//                 Icons.devices_other_rounded,
+//                 color: AppColors.primary,
+//                 size: 22,
+//               ),
 //             ),
 //           ),
-//           const SizedBox(height: 6),
-//           Text(
-//             "Device ID: ${deviceId ?? "-"}",
-//             style: TextStyle(
-//               color: AppColors.white.withOpacity(0.62),
-//               fontWeight: FontWeight.w600,
+//         ),
+//       ],
+//     );
+//   }
+// }
+//
+// class SmartDeviceHeaderCard extends StatelessWidget {
+//   final bool hasDevice;
+//   final bool deviceOnline;
+//   final bool motorRunning;
+//   final String displayName;
+//   final String? deviceId;
+//   final String? triggerType;
+//
+//   const SmartDeviceHeaderCard({
+//     super.key,
+//     required this.hasDevice,
+//     required this.deviceOnline,
+//     required this.motorRunning,
+//     required this.displayName,
+//     required this.deviceId,
+//     this.triggerType,
+//   });
+//
+//   String _formatTriggerType(String? value) {
+//     switch (value?.toLowerCase().trim()) {
+//       case 'physical':
+//         return 'Physical Button';
+//
+//       case 'time':
+//       case 'timer':
+//         return 'Timer';
+//
+//       case 'schedule':
+//         return 'Schedule';
+//
+//       case 'app':
+//         return 'App';
+//
+//       default:
+//         return 'Unknown';
+//     }
+//   }
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final color = !hasDevice
+//         ? AppColors.primary
+//         : !deviceOnline
+//         ? AppColors.warning
+//         : motorRunning
+//         ? AppColors.greenDark
+//         : AppColors.primary;
+//
+//     final icon = !hasDevice
+//         ? Icons.hub_outlined
+//         : !deviceOnline
+//         ? Icons.wifi_tethering_error_rounded
+//         : motorRunning
+//         ? Icons.power_settings_new_rounded
+//         : Icons.verified_rounded;
+//
+//     final statusText = !hasDevice
+//         ? "Ready to connect"
+//         : !deviceOnline
+//         ? "Waiting for live telemetry"
+//         : motorRunning
+//         ? "Device online | Motor ON"
+//         : "Device online | Motor OFF";
+//
+//     final triggerText = _formatTriggerType(triggerType);
+//
+//     return Container(
+//       padding: const EdgeInsets.all(18),
+//       decoration: BoxDecoration(
+//         color: AppColors.cardDark.withOpacity(0.94),
+//         borderRadius: BorderRadius.circular(26),
+//         border: Border.all(color: AppColors.white.withOpacity(0.14)),
+//         boxShadow: [
+//           BoxShadow(
+//             color: color.withOpacity(0.10),
+//             blurRadius: 28,
+//             offset: const Offset(0, 14),
+//           ),
+//         ],
+//       ),
+//       child: Row(
+//         children: [
+//           Container(
+//             height: 62,
+//             width: 62,
+//             decoration: BoxDecoration(
+//               color: color.withOpacity(0.14),
+//               borderRadius: BorderRadius.circular(20),
+//             ),
+//             child: Icon(
+//               icon,
+//               color: color,
+//               size: 32,
 //             ),
 //           ),
-//           const SizedBox(height: 6),
-//           Text(
-//             "Timestamp: ${_formatTimestamp(timestamp)}",
-//             style: TextStyle(
-//               color: AppColors.white.withOpacity(0.62),
-//               fontWeight: FontWeight.w600,
+//
+//           const SizedBox(width: 14),
+//
+//           Expanded(
+//             child: Column(
+//               crossAxisAlignment: CrossAxisAlignment.start,
+//               children: [
+//                 if (!hasDevice || deviceId != displayName)
+//                   Text(
+//                     hasDevice
+//                         ? (deviceId ?? "Unknown device")
+//                         : "No controller selected",
+//                     maxLines: 1,
+//                     overflow: TextOverflow.ellipsis,
+//                     style: TextStyle(
+//                       color: AppColors.white.withOpacity(1),
+//                       fontSize: 13,
+//                       fontWeight: FontWeight.bold,
+//                     ),
+//                   ),
+//
+//                 const SizedBox(height: 6),
+//
+//                 Text(
+//                   statusText,
+//                   style: TextStyle(
+//                     color: color,
+//                     fontSize: 14,
+//                     fontWeight: FontWeight.w800,
+//                   ),
+//                 ),
+//
+//                 // -----------------------------
+//                 // MOTOR TRIGGER TYPE
+//                 // -----------------------------
+//                 if (motorRunning && triggerType != null) ...[
+//                   const SizedBox(height: 5),
+//
+//                   Row(
+//                     children: [
+//                       Icon(
+//                         Icons.touch_app_rounded,
+//                         size: 14,
+//                         color: AppColors.white.withOpacity(0.60),
+//                       ),
+//                       const SizedBox(width: 5),
+//                       Text(
+//                         "Started by: ",
+//                         style: TextStyle(
+//                           color: AppColors.white.withOpacity(0.45),
+//                           fontSize: 11,
+//                           fontWeight: FontWeight.w700,
+//                         ),
+//                       ),
+//                       Text(
+//                         triggerText,
+//                         style: TextStyle(
+//                           color: color,
+//                           fontSize: 11,
+//                           fontWeight: FontWeight.w900,
+//                         ),
+//                       ),
+//                     ],
+//                   ),
+//                 ],
+//
+//                 const SizedBox(height: 5),
+//
+//                 Text(
+//                   hasDevice
+//                       ? (deviceId ?? "Unknown device")
+//                       : "No controller selected",
+//                   maxLines: 1,
+//                   overflow: TextOverflow.ellipsis,
+//                   style: TextStyle(
+//                     color: AppColors.white.withOpacity(0.45),
+//                     fontSize: 11,
+//                     fontWeight: FontWeight.w700,
+//                   ),
+//                 ),
+//               ],
 //             ),
 //           ),
 //         ],
 //       ),
 //     );
 //   }
+// }
 //
-//   String _formatTimestamp(int? timestamp) {
-//     if (timestamp == null) return "-";
+// class NoDeviceProfessionalNotice extends StatelessWidget {
+//   final VoidCallback onSelectDevice;
 //
-//     final dateTime =
-//     DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toLocal();
+//   const NoDeviceProfessionalNotice({
+//     super.key,
+//     required this.onSelectDevice,
+//   });
 //
-//     return DateFormat("dd MMM yyyy, HH:mm:ss").format(dateTime);
+//   @override
+//   Widget build(BuildContext context) {
+//     return Container(
+//       padding: const EdgeInsets.all(18),
+//       decoration: BoxDecoration(
+//         color: AppColors.cardDark.withOpacity(0.94),
+//         borderRadius: BorderRadius.circular(24),
+//         border: Border.all(color: AppColors.white.withOpacity(0.14)),
+//       ),
+//       child: Row(
+//         children: [
+//           Container(
+//             height: 46,
+//             width: 46,
+//             decoration: BoxDecoration(
+//               color: AppColors.primary.withOpacity(0.10),
+//               borderRadius: BorderRadius.circular(16),
+//             ),
+//             child: const Icon(
+//               Icons.devices_other_rounded,
+//               color: AppColors.primary,
+//             ),
+//           ),
+//           const SizedBox(width: 14),
+//           Expanded(
+//             child: Text(
+//               "Select a device to enable motor control. Parameters stay empty until a controller is selected.",
+//               style: TextStyle(
+//                 color: AppColors.white.withOpacity(0.68),
+//                 fontSize: 13.5,
+//                 height: 1.4,
+//                 fontWeight: FontWeight.w700,
+//               ),
+//             ),
+//           ),
+//           const SizedBox(width: 10),
+//           TextButton(
+//             onPressed: onSelectDevice,
+//             child: const Text(
+//               "Select",
+//               style: TextStyle(
+//                 color: AppColors.primary,
+//                 fontWeight: FontWeight.w900,
+//               ),
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
 //   }
 // }
+//
+// // class DeviceOfflineNotice extends StatelessWidget {
+// //   final Future<void> Function() onRetry;
+// //
+// //   const DeviceOfflineNotice({
+// //     super.key,
+// //     required this.onRetry,
+// //   });
+// //
+// //   @override
+// //   Widget build(BuildContext context) {
+// //     return Container(
+// //       padding: const EdgeInsets.all(14),
+// //       decoration: BoxDecoration(
+// //         color: AppColors.warning.withOpacity(0.10),
+// //         borderRadius: BorderRadius.circular(18),
+// //         border: Border.all(color: AppColors.warning.withOpacity(0.24)),
+// //       ),
+// //       child: Row(
+// //         children: [
+// //           const Icon(
+// //             Icons.info_outline_rounded,
+// //             color: AppColors.warning,
+// //             size: 22,
+// //           ),
+// //           const SizedBox(width: 10),
+// //           // Expanded(
+// //           //   child: Text(
+// //           //     "Device selected. Waiting for latest live reading.",
+// //           //     style: TextStyle(
+// //           //       color: AppColors.white.withOpacity(0.78),
+// //           //       fontSize: 12.8,
+// //           //       fontWeight: FontWeight.w700,
+// //           //     ),
+// //           //   ),
+// //           // ),
+// //           // TextButton(
+// //           //   onPressed: onRetry,
+// //           //   child: const Text(
+// //           //     "Retry",
+// //           //     style: TextStyle(
+// //           //       color: AppColors.warning,
+// //           //       fontWeight: FontWeight.w900,
+// //           //     ),
+// //           //   ),
+// //           // ),
+// //         ],
+// //       ),
+// //     );
+// //   }
+// // }
+//
+// class DeviceOnlineNotice extends StatelessWidget {
+//   final bool motorRunning;
+//
+//   const DeviceOnlineNotice({
+//     super.key,
+//     required this.motorRunning,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     // final text = motorRunning
+//     //     ? "Live telemetry received. Motor is running."
+//     //     : "Live telemetry received. Motor is stopped.";
+//
+//     return Container(
+//       padding: const EdgeInsets.all(14),
+//       decoration: BoxDecoration(
+//         color: AppColors.darkBorderSoft,
+//         borderRadius: BorderRadius.circular(18),
+//         border: Border.all(color: AppColors.green.withOpacity(0.24)),
+//       ),
+//       child: Row(
+//         children: [
+//           const Icon(
+//             Icons.check_circle_rounded,
+//             color: AppColors.green,
+//             size: 22,
+//           ),
+//           const SizedBox(width: 10),
+//           // Expanded(
+//           //   child: Text(
+//           //     text,
+//           //     style: TextStyle(
+//           //       color: AppColors.white.withOpacity(0.78),
+//           //       fontSize: 12.8,
+//           //       fontWeight: FontWeight.w700,
+//           //     ),
+//           //   ),
+//           // ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+//
+// class CustomerNameInputCard extends StatelessWidget {
+//   final TextEditingController controller;
+//   final FocusNode focusNode;
+//   final List<String> suggestions;
+//   final bool enabled;
+//
+//   const CustomerNameInputCard({
+//     super.key,
+//     required this.controller,
+//     required this.focusNode,
+//     required this.suggestions,
+//     required this.enabled,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return Column(
+//       crossAxisAlignment: CrossAxisAlignment.start,
+//       children: [
+//         Padding(
+//           padding: const EdgeInsets.only(left: 4, bottom: 9),
+//           child: Row(
+//             children: [
+//               Icon(
+//                 Icons.account_circle_outlined,
+//                 size: 17,
+//                 color: AppColors.white.withOpacity(0.48),
+//               ),
+//               const SizedBox(width: 7),
+//               Text(
+//                 "CUSTOMER / KHATA",
+//                 style: TextStyle(
+//                   color: AppColors.white.withOpacity(1),
+//                   fontSize: 11,
+//                   letterSpacing: 1.1,
+//                   fontWeight: FontWeight.w900,
+//                 ),
+//               ),
+//             ],
+//           ),
+//         ),
+//         RawAutocomplete<String>(
+//           textEditingController: controller,
+//           focusNode: focusNode,
+//           optionsBuilder: (TextEditingValue value) {
+//             if (!enabled) return const Iterable<String>.empty();
+//
+//             final input = value.text.trim().toLowerCase();
+//
+//             if (input.isEmpty) {
+//               return suggestions.take(8);
+//             }
+//
+//             final startsWith = <String>[];
+//             final contains = <String>[];
+//
+//             for (final name in suggestions) {
+//               final lower = name.toLowerCase();
+//               if (lower.startsWith(input)) {
+//                 startsWith.add(name);
+//               } else if (lower.contains(input)) {
+//                 contains.add(name);
+//               }
+//             }
+//
+//             return [...startsWith, ...contains].take(8);
+//           },
+//           onSelected: (String value) {
+//             controller.text = value;
+//             controller.selection = TextSelection.collapsed(
+//               offset: controller.text.length,
+//             );
+//           },
+//           fieldViewBuilder: (
+//               context,
+//               textEditingController,
+//               fieldFocusNode,
+//               onFieldSubmitted,
+//               ) {
+//             return AnimatedContainer(
+//               duration: const Duration(milliseconds: 180),
+//               decoration: BoxDecoration(
+//                 color: AppColors.cardDark.withOpacity(0.94),
+//                 borderRadius: BorderRadius.circular(20),
+//                 border: Border.all(
+//                   color: fieldFocusNode.hasFocus
+//                       ? AppColors.primary.withOpacity(0.70)
+//                       : AppColors.white.withOpacity(0.14),
+//                 ),
+//                 boxShadow: [
+//                   BoxShadow(
+//                     color: Colors.black.withOpacity(0.16),
+//                     blurRadius: 16,
+//                     offset: const Offset(0, 8),
+//                   ),
+//                 ],
+//               ),
+//               child: TextField(
+//                 enabled: enabled,
+//                 controller: textEditingController,
+//                 focusNode: fieldFocusNode,
+//                 keyboardType: TextInputType.name,
+//                 textCapitalization: TextCapitalization.words,
+//                 autocorrect: false,
+//                 style: const TextStyle(
+//                   color: AppColors.white,
+//                   fontSize: 15.5,
+//                   fontWeight: FontWeight.w800,
+//                 ),
+//                 textInputAction: TextInputAction.done,
+//                 decoration: InputDecoration(
+//                   hintText: enabled
+//                       ? "Enter new or previous customer"
+//                       : "Device must be online first",
+//                   hintStyle: TextStyle(
+//                     color: AppColors.white.withOpacity(1),
+//                     fontWeight: FontWeight.w600,
+//                   ),
+//                   prefixIcon: Icon(
+//                     enabled
+//                         ? Icons.person_search_rounded
+//                         : Icons.lock_outline_rounded,
+//                     color: AppColors.white,
+//                   ),
+//                   suffixIcon: enabled && suggestions.isNotEmpty
+//                       ? Tooltip(
+//                     message: "Previous customers available",
+//                     child: Icon(
+//                       Icons.history_rounded,
+//                       color: AppColors.white.withOpacity(1),
+//                     ),
+//                   )
+//                       : null,
+//                   border: InputBorder.none,
+//                   contentPadding: const EdgeInsets.symmetric(
+//                     horizontal: 18,
+//                     vertical: 18,
+//                   ),
+//                 ),
+//               ),
+//             );
+//           },
+//           optionsViewBuilder: (context, onSelected, options) {
+//             final optionList = options.toList();
+//
+//             return Align(
+//               alignment: Alignment.topLeft,
+//               child: Material(
+//                 color: Colors.transparent,
+//                 child: Container(
+//                   width: MediaQuery.of(context).size.width - 36,
+//                   constraints: const BoxConstraints(
+//                     maxHeight: 290,
+//                     maxWidth: 560,
+//                   ),
+//                   margin: const EdgeInsets.only(top: 8),
+//                   decoration: BoxDecoration(
+//                     color: AppColors.cardDark.withOpacity(0.94),
+//                     borderRadius: BorderRadius.circular(18),
+//                     border: Border.all(color: AppColors.white.withOpacity(0.14)),
+//                     boxShadow: [
+//                       BoxShadow(
+//                         color: Colors.black.withOpacity(0.28),
+//                         blurRadius: 24,
+//                         offset: const Offset(0, 12),
+//                       ),
+//                     ],
+//                   ),
+//                   child: Column(
+//                     mainAxisSize: MainAxisSize.min,
+//                     crossAxisAlignment: CrossAxisAlignment.start,
+//                     children: [
+//                       Padding(
+//                         padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+//                         child: Row(
+//                           children: [
+//                             const Icon(
+//                               Icons.history_rounded,
+//                               color: AppColors.primary,
+//                               size: 18,
+//                             ),
+//                             const SizedBox(width: 8),
+//                             Text(
+//                               "Previous customers",
+//                               style: TextStyle(
+//                                 color: AppColors.white.withOpacity(0.62),
+//                                 fontSize: 12,
+//                                 fontWeight: FontWeight.w900,
+//                               ),
+//                             ),
+//                           ],
+//                         ),
+//                       ),
+//                       Flexible(
+//                         child: ListView.separated(
+//                           padding: const EdgeInsets.only(bottom: 7),
+//                           shrinkWrap: true,
+//                           itemCount: optionList.length,
+//                           separatorBuilder: (_, __) => Divider(
+//                             height: 1,
+//                             color: AppColors.white.withOpacity(0.06),
+//                           ),
+//                           itemBuilder: (context, index) {
+//                             final option = optionList[index];
+//
+//                             return ListTile(
+//                               dense: true,
+//                               leading: Container(
+//                                 height: 34,
+//                                 width: 34,
+//                                 alignment: Alignment.center,
+//                                 decoration: BoxDecoration(
+//                                   color: AppColors.primary.withOpacity(0.10),
+//                                   shape: BoxShape.circle,
+//                                 ),
+//                                 child: const Icon(
+//                                   Icons.person_rounded,
+//                                   color: AppColors.primary,
+//                                   size: 18,
+//                                 ),
+//                               ),
+//                               title: Text(
+//                                 option,
+//                                 style: const TextStyle(
+//                                   color: AppColors.white,
+//                                   fontWeight: FontWeight.w800,
+//                                 ),
+//                               ),
+//                               trailing: Icon(
+//                                 Icons.north_west_rounded,
+//                                 size: 17,
+//                                 color: AppColors.white.withOpacity(0.30),
+//                               ),
+//                               onTap: () => onSelected(option),
+//                             );
+//                           },
+//                         ),
+//                       ),
+//                     ],
+//                   ),
+//                 ),
+//               ),
+//             );
+//           },
+//         ),
+//         if (enabled)
+//           Padding(
+//             padding: const EdgeInsets.only(left: 5, top: 8),
+//             child: Text(
+//               suggestions.isEmpty
+//                   ? "New customer names will appear here next time."
+//                   : "Type to search, or select a previously used customer.",
+//               style: TextStyle(
+//                 color: AppColors.white.withOpacity(1),
+//                 fontSize: 11.5,
+//                 fontWeight: FontWeight.w600,
+//               ),
+//             ),
+//           ),
+//       ],
+//     );
+//   }
+// }
+//
+// class MotorCommandButton extends StatelessWidget {
+//   final bool hasDevice;
+//   final bool deviceOnline;
+//   final bool isOn;
+//   final bool loading;
+//   final double size;
+//
+//   const MotorCommandButton({
+//     super.key,
+//     required this.hasDevice,
+//     required this.deviceOnline,
+//     required this.isOn,
+//     required this.loading,
+//     required this.size,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final activeColor = !hasDevice
+//         ? AppColors.primary
+//         : !deviceOnline
+//         ? AppColors.warning
+//         : isOn
+//         ? AppColors.green
+//         : AppColors.error;
+//
+//     final label = !hasDevice
+//         ? "SELECT"
+//         : !deviceOnline
+//         ? "WAIT"
+//         : isOn
+//         ? "ON"
+//         : "OFF";
+//
+//     final icon = !hasDevice
+//         ? Icons.devices_other_rounded
+//         : !deviceOnline
+//         ? Icons.wifi_tethering_error_rounded
+//         : isOn
+//         ? Icons.power_settings_new_rounded
+//         : Icons.power_off_rounded;
+//
+//     final textColor = !hasDevice ? AppColors.black : AppColors.white;
+//
+//     return AnimatedContainer(
+//       duration: const Duration(milliseconds: 300),
+//       width: size,
+//       height: size,
+//       alignment: Alignment.center,
+//       decoration: BoxDecoration(
+//         shape: BoxShape.circle,
+//         gradient: LinearGradient(
+//           begin: Alignment.topLeft,
+//           end: Alignment.bottomRight,
+//           colors: [
+//             activeColor,
+//             activeColor.withOpacity(0.72),
+//           ],
+//         ),
+//         boxShadow: [
+//           BoxShadow(
+//             color: activeColor.withOpacity(0.30),
+//             blurRadius: 34,
+//             offset: const Offset(0, 16),
+//           ),
+//         ],
+//       ),
+//       child: loading
+//           ? const CircularProgressIndicator(color: AppColors.white)
+//           : Column(
+//         mainAxisAlignment: MainAxisAlignment.center,
+//         children: [
+//           Icon(
+//             icon,
+//             color: textColor,
+//             size: size < 190 ? 36 : 42,
+//           ),
+//           const SizedBox(height: 8),
+//           FittedBox(
+//             child: Text(
+//               label,
+//               style: TextStyle(
+//                 color: textColor,
+//                 fontSize: label == "SELECT"
+//                     ? 24
+//                     : label == "WAIT"
+//                     ? 24
+//                     : size < 190
+//                     ? 26
+//                     : 36,
+//                 fontWeight: FontWeight.w900,
+//               ),
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+//
+// class MotorRunStatusCard extends StatelessWidget {
+//   final bool hasDevice;
+//   final bool deviceOnline;
+//   final bool isOn;
+//   final bool waitingForVfd;
+//   final String runningTime;
+//   final String serverStartTime;
+//   final String serverEndTime;
+//   final bool hasServerStartTime;
+//   final bool hasServerEndTime;
+//   final bool vfdSessionInterrupted;
+//   final bool vfdRestartedAfterInterruption;
+//
+//   const MotorRunStatusCard({
+//     super.key,
+//     required this.hasDevice,
+//     required this.deviceOnline,
+//     required this.isOn,
+//     required this.waitingForVfd,
+//     required this.runningTime,
+//     required this.serverStartTime,
+//     required this.serverEndTime,
+//     required this.hasServerStartTime,
+//     required this.hasServerEndTime,
+//     required this.vfdSessionInterrupted,
+//     required this.vfdRestartedAfterInterruption,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final active = hasDevice && deviceOnline && isOn;
+//
+//     final title = !hasDevice
+//         ? "NO DEVICE"
+//         : !deviceOnline
+//         ? "WAITING FOR DEVICE"
+//         : waitingForVfd
+//         ? "SYNCING WITH VFD"
+//         : vfdRestartedAfterInterruption
+//         ? "VFD RESTARTED"
+//         : vfdSessionInterrupted
+//         ? "VFD SESSION INTERRUPTED"
+//         : active
+//         ? "MOTOR RUN TIME"
+//         : "MOTOR STOPPED";
+//
+//     final subtitle = !hasDevice
+//         ? "Select a controller to start monitoring"
+//         : !deviceOnline
+//         ? "Waiting for fresh live telemetry"
+//         : waitingForVfd
+//         ? "Waiting for the VFD to confirm the command"
+//         : vfdRestartedAfterInterruption
+//         ? "Motor is physically ON, but old runtime stays frozen. OFF then ON to start a clean new server session."
+//         : vfdSessionInterrupted
+//         ? "VFD stopped outside the normal app OFF flow. Runtime is frozen and will not restart automatically."
+//         : active
+//         ? "Elapsed time from the original server/database start time"
+//         : "Timer starts only after VFD confirms ON";
+//
+//     final accent = active ? AppColors.green : AppColors.primary;
+//
+//     return Container(
+//       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+//       decoration: BoxDecoration(
+//         color: AppColors.cardDark.withOpacity(0.94),
+//         borderRadius: BorderRadius.circular(20),
+//         border: Border.all(
+//           color: active
+//               ? AppColors.green.withOpacity(0.28)
+//               : AppColors.white.withOpacity(0.14),
+//         ),
+//       ),
+//       child: Row(
+//         children: [
+//           Container(
+//             height: 44,
+//             width: 44,
+//             alignment: Alignment.center,
+//             decoration: BoxDecoration(
+//               color: accent.withOpacity(0.11),
+//               borderRadius: BorderRadius.circular(14),
+//             ),
+//             child: waitingForVfd
+//                 ? SizedBox(
+//               height: 21,
+//               width: 21,
+//               child: CircularProgressIndicator(
+//                 strokeWidth: 2.4,
+//                 color: accent,
+//               ),
+//             )
+//                 : Icon(
+//               active ? Icons.timer_rounded : Icons.timer_off_outlined,
+//               color: accent,
+//               size: 23,
+//             ),
+//           ),
+//           const SizedBox(width: 13),
+//           Expanded(
+//             child: Column(
+//               crossAxisAlignment: CrossAxisAlignment.start,
+//               children: [
+//                 Text(
+//                   title,
+//                   style: TextStyle(
+//                     color: AppColors.white.withOpacity(0.54),
+//                     fontSize: 10.5,
+//                     letterSpacing: 0.9,
+//                     fontWeight: FontWeight.w900,
+//                   ),
+//                 ),
+//                 const SizedBox(height: 4),
+//                 Text(
+//                   subtitle,
+//                   maxLines: 2,
+//                   overflow: TextOverflow.ellipsis,
+//                   style: TextStyle(
+//                     color: AppColors.white.withOpacity(0.60),
+//                     fontSize: 11.8,
+//                     fontWeight: FontWeight.w600,
+//                   ),
+//                 ),
+//                 if (hasServerStartTime) ...[
+//                   const SizedBox(height: 6),
+//                   Text(
+//                     "ON: $serverStartTime",
+//                     maxLines: 1,
+//                     overflow: TextOverflow.ellipsis,
+//                     style: TextStyle(
+//                       color: AppColors.green.withOpacity(0.88),
+//                       fontSize: 10.8,
+//                       fontWeight: FontWeight.w800,
+//                     ),
+//                   ),
+//                 ],
+//                 if (hasServerStartTime) ...[
+//                   const SizedBox(height: 3),
+//                   Text(
+//                     hasServerEndTime
+//                         ? "OFF: $serverEndTime"
+//                         : "OFF: Running",
+//                     maxLines: 1,
+//                     overflow: TextOverflow.ellipsis,
+//                     style: TextStyle(
+//                       color: hasServerEndTime
+//                           ? AppColors.error.withOpacity(0.88)
+//                           : AppColors.white.withOpacity(0.52),
+//                       fontSize: 10.8,
+//                       fontWeight: FontWeight.w800,
+//                     ),
+//                   ),
+//                 ],
+//               ],
+//             ),
+//           ),
+//           const SizedBox(width: 12),
+//           Text(
+//             active ||
+//                 hasServerEndTime ||
+//                 vfdSessionInterrupted ||
+//                 vfdRestartedAfterInterruption
+//                 ? runningTime
+//                 : "00:00:00",
+//             style: TextStyle(
+//               color: active && !vfdRestartedAfterInterruption
+//                   ? AppColors.green
+//                   : vfdSessionInterrupted ||
+//                   vfdRestartedAfterInterruption
+//                   ? AppColors.warning
+//                   : hasServerEndTime
+//                   ? AppColors.primary
+//                   : AppColors.white.withOpacity(0.42),
+//               fontSize: 20,
+//               fontWeight: FontWeight.w900,
+//               fontFeatures: const [FontFeature.tabularFigures()],
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+//
+// class ParameterMetric {
+//   final IconData icon;
+//   final String title;
+//   final String value;
+//   final bool highlight;
+//
+//   const ParameterMetric({
+//     required this.icon,
+//     required this.title,
+//     required this.value,
+//     this.highlight = false,
+//   });
+// }
+//
+// class ParameterGridSection extends StatelessWidget {
+//   final int crossAxisCount;
+//   final double childAspectRatio;
+//   final List<ParameterMetric> metrics;
+//
+//   const ParameterGridSection({
+//     super.key,
+//     required this.crossAxisCount,
+//     required this.childAspectRatio,
+//     required this.metrics,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return GridView.count(
+//       shrinkWrap: true,
+//       physics: const NeverScrollableScrollPhysics(),
+//       crossAxisCount: crossAxisCount,
+//       crossAxisSpacing: 14,
+//       mainAxisSpacing: 14,
+//       childAspectRatio: childAspectRatio,
+//       children: metrics.map((metric) {
+//         return ParameterMetricCard(metric: metric);
+//       }).toList(),
+//     );
+//   }
+// }
+//
+// class ParameterMetricCard extends StatelessWidget {
+//   final ParameterMetric metric;
+//
+//   const ParameterMetricCard({
+//     super.key,
+//     required this.metric,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final width = MediaQuery.of(context).size.width;
+//     final compact = width < 360;
+//
+//     return Container(
+//       padding: EdgeInsets.all(compact ? 13 : 17),
+//       decoration: BoxDecoration(
+//         color: AppColors.cardDark.withOpacity(0.94),
+//         borderRadius: BorderRadius.circular(22),
+//         border: Border.all(
+//           color: metric.highlight
+//               ? AppColors.primary
+//               : AppColors.white,
+//         ),
+//         boxShadow: [
+//           BoxShadow(
+//             color: Colors.black.withOpacity(0.20),
+//             blurRadius: 18,
+//             offset: const Offset(0, 9),
+//           ),
+//         ],
+//       ),
+//       child: Column(
+//         crossAxisAlignment: CrossAxisAlignment.start,
+//         children: [
+//           Icon(
+//             metric.icon,
+//             color: metric.highlight
+//                 ? AppColors.primary
+//                 : AppColors.white.withOpacity(0.45),
+//             size: compact ? 24 : 28,
+//           ),
+//           const Spacer(),
+//           Text(
+//             metric.title,
+//             maxLines: 1,
+//             overflow: TextOverflow.ellipsis,
+//             style: TextStyle(
+//               color: AppColors.white,
+//               fontSize: compact ? 12.5 : 14,
+//               fontWeight: FontWeight.w700,
+//             ),
+//           ),
+//           const SizedBox(height: 8),
+//           FittedBox(
+//             alignment: Alignment.centerLeft,
+//             fit: BoxFit.scaleDown,
+//             child: Text(
+//               metric.value,
+//               style: TextStyle(
+//                 color: AppColors.white,
+//                 height: 1.25,
+//                 fontSize: compact ? 17 : 20,
+//                 fontWeight: FontWeight.w900,
+//               ),
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+//
+import "package:smart_iot_app/src/features/motor/data/models/motor_log_response.dart";
 
+import "../../../logs/data/presentation/providers/motor_log_providers.dart";
+import "../../../telemetry/presentation/providers/telemetry_providers.dart";
 import "dart:async";
-
+// // //
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-
+// // //
 import "package:smart_iot_app/src/core/constant/app_color.dart";
 import "package:smart_iot_app/src/features/khata/data/models/khata_entry_model.dart";
 import "package:smart_iot_app/src/features/widget/custom_drawer.dart";
-
+// // //
 import "../../../../app/routes.dart";
 import "../../../khata/presentation/providers/ khata_providers.dart";
-
 import "../../../motor/presentation/ providers/motor_providers.dart";
 
-import "../../../motor/presentation/state/motor_state.dart";
 
-
-
-import "../../../telemetry/presentation/providers/telemetry_providers.dart";
 
 class HomeScreen extends ConsumerStatefulWidget {
   final String? deviceId;
@@ -5240,22 +9802,25 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController pulseController;
   late Animation<double> pulseAnimation;
 
-
-
   final TextEditingController customerNameController = TextEditingController();
   final FocusNode customerNameFocusNode = FocusNode();
-  KhataEntryModel? activeKhataEntry;
 
-  Timer? commandSyncTimer;
+  KhataEntryModel? activeKhataEntry;
+  String? activeTriggerType;
+
   Timer? telemetryTimer;
   Timer? runTimer;
 
   int runSeconds = 0;
-  int telemetryFailures = 0;
+  DateTime? motorStartedAt;
+
+  // Authoritative MotorLog timestamps returned by the server/database.
+  DateTime? serverMotorStartedAt;
+  DateTime? serverMotorStoppedAt;
 
   String? userId;
   String? deviceId;
@@ -5263,12 +9828,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   bool didSetupDevice = false;
   bool isTelemetryLoading = false;
+  bool firstTelemetryLoaded = false;
+
+  // Prevents the UI from starting a brand-new timer before we have checked
+  // whether an existing open Khata session already has the real start time.
+  bool didRestoreMotorSession = false;
+  bool isRestoringMotorSession = false;
+
+  // Keeps the motor button in loading state until VFD telemetry confirms
+  // the requested ON/OFF state.
+  bool isWaitingForVfdConfirmation = false;
+
+  // While a command is pending, keep showing the last confirmed state.
+  // This prevents ON -> OFF -> ON / OFF -> ON -> OFF visual flicker.
+  bool? motorStateBeforePendingCommand;
+
+  // Track physical VFD transitions separately from app commands.
+  // If VFD turns OFF unexpectedly, the current run is frozen.
+  // If it later comes ON by itself, the old timer is NOT resumed because
+  // that would incorrectly include the OFF period in runtime/billing.
+  bool? _lastFreshVfdRunning;
+  bool _vfdSessionInterrupted = false;
+  bool _vfdRestartedAfterInterruption = false;
+
+  // Prevent overlapping server-log syncs when the motor was started
+  // externally by Schedule / Timer instead of the Home ON button.
+  bool _syncingExternalMotorSession = false;
 
   bool get hasDevice => deviceId != null && deviceId!.trim().isNotEmpty;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     pulseController = AnimationController(
       vsync: this,
@@ -5278,6 +9870,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     pulseAnimation = Tween<double>(begin: 0.82, end: 1.12).animate(
       CurvedAnimation(parent: pulseController, curve: Curves.easeInOut),
     );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshRunSeconds();
+
+      if (hasDevice) {
+        Future.microtask(() async {
+          await loadTelemetry(showError: false);
+          await ref.read(khataViewModelProvider.notifier).loadEntries();
+          await _restoreMotorSessionFromKhata();
+        });
+      }
+    }
   }
 
   @override
@@ -5291,33 +9898,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     if (args is Map) {
       userId = args["userId"]?.toString();
-      deviceId = args["deviceId"]?.toString().trim();
-      deviceName = args["deviceName"]?.toString().trim();
+
+      final rawDeviceId = args["deviceId"]?.toString().trim();
+      if (rawDeviceId != null && rawDeviceId.isNotEmpty) {
+        deviceId = rawDeviceId;
+      }
+
+      final rawDeviceName = args["deviceName"]?.toString().trim();
+      if (rawDeviceName != null && rawDeviceName.isNotEmpty) {
+        deviceName = rawDeviceName;
+      }
     }
 
     final widgetDeviceId = widget.deviceId?.trim();
-    deviceId = deviceId?.isNotEmpty == true ? deviceId : widgetDeviceId;
 
-    if (deviceId != null && deviceId!.trim().isEmpty) {
-      deviceId = null;
-    }
-
-    if (deviceName != null && deviceName!.trim().isEmpty) {
-      deviceName = null;
+    if (!hasDevice && widgetDeviceId != null && widgetDeviceId.isNotEmpty) {
+      deviceId = widgetDeviceId;
     }
 
     if (hasDevice) {
       Future.microtask(() async {
-        await syncMotorCommandSilently();
         await loadTelemetry();
         await ref.read(khataViewModelProvider.notifier).loadEntries();
+        await _restoreMotorSessionFromKhata();
       });
 
-      commandSyncTimer = Timer.periodic(
-        const Duration(seconds: 5),
-            (_) => syncMotorCommandSilently(),
-      );
-
+      telemetryTimer?.cancel();
       telemetryTimer = Timer.periodic(
         const Duration(seconds: 5),
             (_) => loadTelemetry(showError: false),
@@ -5327,79 +9933,519 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     pulseController.dispose();
     customerNameController.dispose();
     customerNameFocusNode.dispose();
-    commandSyncTimer?.cancel();
     telemetryTimer?.cancel();
     runTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> syncMotorCommandSilently() async {
-    if (!hasDevice) return;
+  int _toInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString()) ?? 0;
+  }
 
-    await ref.read(motorViewModelProvider.notifier).syncMotorCommand(
-      deviceId: deviceId!,
-      silent: true,
-    );
+  bool isDeviceOnline(dynamic latest) {
+    if (!hasDevice) return false;
+    if (latest == null) return false;
 
-    final motorState = ref.read(motorViewModelProvider);
+    final live = _toInt(latest.isLive) == 1;
+    final fresh = latest.isFresh(withinSeconds: 20);
 
-    if (!mounted) return;
+    return live && fresh;
+  }
 
-    if (motorState.isMotorOn && runTimer == null) {
-      _startLocalTimer();
-    }
 
-    if (!motorState.isMotorOn && runTimer != null) {
-      _stopLocalTimer();
-      setState(() => runSeconds = 0);
-    }
+  bool isMotorRunning(dynamic latest) {
+    if (!hasDevice) return false;
+    if (!isDeviceOnline(latest)) return false;
+
+    final statusCode = _toInt(latest.statusCode);
+
+    return statusCode == 1 || statusCode == 2;
   }
 
   Future<void> loadTelemetry({bool showError = false}) async {
-    if (!hasDevice || isTelemetryLoading) return;
+    if (!hasDevice) return;
+    if (isTelemetryLoading) return;
+
+    final isFirstLoad = !firstTelemetryLoaded;
 
     isTelemetryLoading = true;
 
     try {
-      await ref.read(telemetryViewModelProvider.notifier).loadLatest(deviceId!);
+      await ref.read(telemetryViewModelProvider.notifier).loadLatest(
+        deviceId!,
+        showLoading: isFirstLoad,
+      );
 
-      final telemetryState = ref.read(telemetryViewModelProvider);
-
-      if (telemetryState.latest != null) {
-        telemetryFailures = 0;
-      } else if (telemetryState.error != null) {
-        telemetryFailures++;
-      }
-    } catch (_) {
-      telemetryFailures++;
-    } finally {
       if (mounted) {
-        setState(() => isTelemetryLoading = false);
+        final latest = ref.read(telemetryViewModelProvider).latest;
+        _handleFreshVfdTransition(latest);
+
+        // Schedule/Timer starts happen on the backend, so toggleMotor()
+        // is never called. Recover the authoritative MotorLog start time
+        // and trigger so the Home header + timer update automatically.
+        await _syncExternalMotorSessionFromServer(latest);
+      }
+    } catch (e) {
+      if (showError) {
+        showMessage(
+          "Telemetry failed: ${friendlyError(e.toString())}",
+          true,
+          seconds: 8,
+        );
+      }
+    } finally {
+      isTelemetryLoading = false;
+
+      if (mounted && isFirstLoad) {
+        setState(() {
+          firstTelemetryLoaded = true;
+        });
       }
     }
   }
 
-  void _startLocalTimer() {
+  Future<void> _syncExternalMotorSessionFromServer(dynamic latest) async {
+    if (!mounted || !hasDevice || _syncingExternalMotorSession) return;
+    if (!isDeviceOnline(latest)) return;
+
+    final motorRunningNow = isMotorRunning(latest);
+
+    if (!motorRunningNow) {
+      return;
+    }
+
+    // Normal Home/App ON already receives startTime + triggerType directly
+    // from startMotor(). Do not disturb that working flow.
+    if (serverMotorStartedAt != null &&
+        motorStartedAt != null &&
+        activeTriggerType != null) {
+      return;
+    }
+
+    _syncingExternalMotorSession = true;
+
+    try {
+      // Schedule / Timer starts happen on the backend, therefore
+      // toggleMotor() is never called. Load the authoritative MotorLog.
+      await ref
+          .read(motorLogViewModelProvider.notifier)
+          .loadLogs(deviceId!);
+
+      if (!mounted) return;
+
+      final logs = ref.read(motorLogViewModelProvider).logs;
+
+      MotorLogResponse? latestRunningLog;
+
+      for (final log in logs) {
+        if (log.endTime != null || log.startTime == null) {
+          continue;
+        }
+
+        // loadLogs(deviceId) should already be device-scoped, but keep this
+        // check so another device can never be used accidentally.
+        final logDeviceId = log.deviceId?.trim();
+
+        if (logDeviceId != null &&
+            logDeviceId.isNotEmpty &&
+            logDeviceId != deviceId!.trim()) {
+          continue;
+        }
+
+        if (latestRunningLog == null ||
+            log.startTime!.isAfter(latestRunningLog.startTime!)) {
+          latestRunningLog = log;
+        }
+      }
+
+      if (latestRunningLog == null) {
+        return;
+      }
+
+      final authoritativeStart = latestRunningLog.startTime;
+      final serverTrigger =
+      latestRunningLog.triggerType?.trim().toLowerCase();
+
+      if (authoritativeStart == null) {
+        return;
+      }
+
+      // Only this recovery path is for starts which can happen without
+      // pressing the Home ON button.
+      final isExternalAutomation =
+          serverTrigger == "schedule" ||
+              serverTrigger == "time" ||
+              serverTrigger == "timer";
+
+      if (!isExternalAutomation) {
+        return;
+      }
+
+      setState(() {
+        serverMotorStartedAt = authoritativeStart;
+        serverMotorStoppedAt = null;
+
+        // triggerType comes from MotorLogResponse, NOT TelemetryModel.
+        activeTriggerType = serverTrigger;
+
+        // A newly-created schedule/timer MotorLog is a clean new run.
+        _vfdSessionInterrupted = false;
+        _vfdRestartedAfterInterruption = false;
+      });
+
+      // Start existing Home timer from authoritative DB/server startTime.
+      _startLocalTimer(
+        startedAt: authoritativeStart,
+      );
+    } catch (_) {
+      // Retry automatically on the next telemetry poll.
+      // Do not alter the existing physical telemetry state.
+    } finally {
+      _syncingExternalMotorSession = false;
+    }
+  }
+
+  void _handleFreshVfdTransition(dynamic latest) {
+    if (!mounted) return;
+    if (!isDeviceOnline(latest)) return;
+
+    final currentRunning = isMotorRunning(latest);
+    final previousRunning = _lastFreshVfdRunning;
+
+    // Always keep the latest fresh physical state as the baseline.
+    _lastFreshVfdRunning = currentRunning;
+
+    // First fresh reading only establishes the baseline.
+    if (previousRunning == null) {
+      return;
+    }
+
+    // Same physical state: nothing changed.
+    if (previousRunning == currentRunning) {
+      return;
+    }
+
+    // ON/OFF changes caused by our own pending command are handled by the
+    // existing VFD confirmation flow, not as unexpected interruptions.
+    if (isWaitingForVfdConfirmation) {
+      return;
+    }
+
+    // ---------------------------------------------------------------
+    // Unexpected physical ON -> OFF
+    // ---------------------------------------------------------------
+    if (previousRunning && !currentRunning) {
+      _stopLocalTimer(resetStart: false);
+
+      setState(() {
+        _vfdSessionInterrupted = true;
+        _vfdRestartedAfterInterruption = false;
+      });
+
+      return;
+    }
+
+    // ---------------------------------------------------------------
+    // Unexpected physical OFF -> ON
+    // ---------------------------------------------------------------
+    if (!previousRunning &&
+        currentRunning &&
+        _vfdSessionInterrupted) {
+      // Do not restart the old timer. The old session has been interrupted
+      // and resuming it would count VFD downtime as motor runtime.
+      _stopLocalTimer(resetStart: false);
+
+      setState(() {
+        _vfdRestartedAfterInterruption = true;
+      });
+    }
+  }
+
+  Future<bool> _waitForVfdConfirmation({
+    required bool expectedOn,
+    required int telemetryTimestampBeforeCommand,
+  }) async {
+    final deadline = DateTime.now().add(
+      const Duration(seconds: 20),
+    );
+
+    int lastCheckedTimestamp = telemetryTimestampBeforeCommand;
+
+    while (mounted && DateTime.now().isBefore(deadline)) {
+      await loadTelemetry(showError: false);
+
+      if (!mounted) return false;
+
+      final latest = ref.read(telemetryViewModelProvider).latest;
+
+      if (!isDeviceOnline(latest)) {
+        await Future.delayed(
+          const Duration(milliseconds: 400),
+        );
+        continue;
+      }
+
+      final telemetryTimestamp = _toInt(latest?.timestamp);
+
+      // Old telemetry ko confirmation ke liye use nahi karna.
+      if (telemetryTimestamp <= telemetryTimestampBeforeCommand ||
+          telemetryTimestamp <= lastCheckedTimestamp) {
+        await Future.delayed(
+          const Duration(milliseconds: 400),
+        );
+        continue;
+      }
+
+      lastCheckedTimestamp = telemetryTimestamp;
+
+      final confirmedMotorState = isMotorRunning(latest);
+
+      // First NEW VFD response is enough.
+      if (confirmedMotorState == expectedOn) {
+        return true;
+      }
+
+      await Future.delayed(
+        const Duration(milliseconds: 400),
+      );
+    }
+
+    return false;
+  }
+
+  KhataEntryModel? _latestOpenKhataForCurrentDevice() {
+    if (!hasDevice) return null;
+
+    final entries = ref.read(khataViewModelProvider).entries;
+
+    KhataEntryModel? latestOpen;
+
+    for (final entry in entries) {
+      if (entry.deviceId.trim() != deviceId!.trim()) continue;
+      if (!entry.isOpen) continue;
+      if (entry.startTime == null) continue;
+      if (entry.endTime != null) continue;
+
+      if (latestOpen == null ||
+          entry.startTime!.isAfter(latestOpen.startTime!)) {
+        latestOpen = entry;
+      }
+    }
+
+    return latestOpen;
+  }
+
+  Future<void> _restoreMotorSessionFromKhata() async {
+    if (!hasDevice || isRestoringMotorSession) return;
+
+    isRestoringMotorSession = true;
+
+    try {
+      final restoredEntry = _latestOpenKhataForCurrentDevice();
+      final latest = ref.read(telemetryViewModelProvider).latest;
+
+      final hasFreshTelemetry = isDeviceOnline(latest);
+      final vfdSaysRunning =
+      hasFreshTelemetry ? isMotorRunning(latest) : false;
+
+      if (restoredEntry != null) {
+        activeKhataEntry = restoredEntry;
+
+        serverMotorStartedAt = restoredEntry.startTime;
+        serverMotorStoppedAt = restoredEntry.endTime;
+
+        final restoredCustomer = (restoredEntry.customerName ?? "").trim();
+        if (restoredCustomer.isNotEmpty &&
+            customerNameController.text.trim().isEmpty) {
+          customerNameController.text = restoredCustomer;
+          customerNameController.selection = TextSelection.collapsed(
+            offset: customerNameController.text.length,
+          );
+        }
+
+        // An open backend session is authoritative for elapsed time.
+        // Even if the app was killed or the phone slept, elapsed time is
+        // recalculated from this ORIGINAL database timestamp. The periodic
+        // Timer object is recreated, but the elapsed motor time never starts
+        // again from zero.
+        if (!hasFreshTelemetry || vfdSaysRunning) {
+          _startLocalTimer(startedAt: restoredEntry.startTime);
+        }
+      } else {
+        activeKhataEntry = null;
+
+        // If VFD is already running but there is no open app/Khata session,
+        // do not invent an ON timestamp from the phone clock.
+        // Wait for an authoritative server/database startTime.
+        if (vfdSaysRunning && motorStartedAt == null) {
+          _stopLocalTimer();
+        }
+      }
+
+      // Fresh OFF telemetry with an OPEN server/Khata session means the
+      // physical VFD stopped without the normal app OFF finalization.
+      // Freeze the displayed runtime; do not reset it to 00:00:00.
+      if (hasFreshTelemetry && !vfdSaysRunning) {
+        _stopLocalTimer(resetStart: false);
+
+        if (restoredEntry != null) {
+          if (mounted) {
+            setState(() {
+              _vfdSessionInterrupted = true;
+              _vfdRestartedAfterInterruption = false;
+            });
+          } else {
+            _vfdSessionInterrupted = true;
+            _vfdRestartedAfterInterruption = false;
+          }
+        }
+      }
+    } finally {
+      isRestoringMotorSession = false;
+
+      if (mounted) {
+        setState(() {
+          didRestoreMotorSession = true;
+        });
+      } else {
+        didRestoreMotorSession = true;
+      }
+    }
+  }
+
+  void _startLocalTimer({DateTime? startedAt}) {
+    // Never create an ON timestamp from the phone clock.
+    if (startedAt == null) {
+      return;
+    }
+
+    motorStartedAt = startedAt;
+
     runTimer?.cancel();
+    _refreshRunSeconds();
+
     runTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => runSeconds++);
+      _refreshRunSeconds();
     });
   }
 
-  void _stopLocalTimer() {
+  void _refreshRunSeconds() {
+    final startedAt = motorStartedAt;
+    if (!mounted || startedAt == null) return;
+
+    final elapsed =
+        DateTime.now().toUtc().difference(startedAt.toUtc()).inSeconds;
+    final safeElapsed = elapsed < 0 ? 0 : elapsed;
+
+    if (safeElapsed != runSeconds) {
+      setState(() {
+        runSeconds = safeElapsed;
+      });
+    }
+  }
+
+  void _stopLocalTimer({bool resetStart = true}) {
     runTimer?.cancel();
     runTimer = null;
+
+    if (resetStart) {
+      motorStartedAt = null;
+    }
   }
 
   String get runningTime {
-    final seconds = runSeconds <= 0 ? 1 : runSeconds;
+    final seconds = runSeconds < 0 ? 0 : runSeconds;
     final h = (seconds ~/ 3600).toString().padLeft(2, "0");
     final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, "0");
     final s = (seconds % 60).toString().padLeft(2, "0");
     return "$h:$m:$s";
+  }
+  DateTime _toPakistanServerTime(DateTime value) {
+    DateTime utcTime;
+
+    if (value.isUtc) {
+      // Server value already contains proper UTC information.
+      utcTime = value;
+    } else {
+      // Server returned UTC date/time without Z or timezone offset.
+      // Rebuild the same components as UTC instead of converting local time.
+      utcTime = DateTime.utc(
+        value.year,
+        value.month,
+        value.day,
+        value.hour,
+        value.minute,
+        value.second,
+        value.millisecond,
+        value.microsecond,
+      );
+    }
+
+    return utcTime.add(
+      const Duration(hours: 5),
+    );
+  }
+
+  String _formatServerDateTime(DateTime? value) {
+    if (value == null) return "--";
+
+    final pakistanTime = _toPakistanServerTime(value);
+
+    final year =
+    pakistanTime.year.toString().padLeft(4, "0");
+
+    final month =
+    pakistanTime.month.toString().padLeft(2, "0");
+
+    final day =
+    pakistanTime.day.toString().padLeft(2, "0");
+
+    final hour24 = pakistanTime.hour;
+
+    final hour12 = hour24 == 0
+        ? 12
+        : hour24 > 12
+        ? hour24 - 12
+        : hour24;
+
+    final hour =
+    hour12.toString().padLeft(2, "0");
+
+    final minute =
+    pakistanTime.minute.toString().padLeft(2, "0");
+
+    final second =
+    pakistanTime.second.toString().padLeft(2, "0");
+
+    final period =
+    hour24 >= 12 ? "PM" : "AM";
+
+    return "$year-$month-$day  "
+        "$hour:$minute:$second $period PKT";
+  }
+
+  int _serverRunDurationSeconds({
+    required DateTime? startTime,
+    required DateTime? endTime,
+  }) {
+    if (startTime == null || endTime == null) {
+      return 0;
+    }
+
+    final seconds = endTime
+        .toUtc()
+        .difference(startTime.toUtc())
+        .inSeconds;
+
+    return seconds < 0 ? 0 : seconds;
   }
 
   String friendlyError(String? error) {
@@ -5437,16 +10483,42 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       return;
     }
 
+    final latest = ref.read(telemetryViewModelProvider).latest;
+
+    final deviceOnline = isDeviceOnline(latest);
+    final motorRunning = isMotorRunning(latest);
+    final telemetryTimestampBeforeCommand = _toInt(latest?.timestamp);
+
+    if (!deviceOnline) {
+      showMessage(
+        "Device is offline. Wait for live telemetry before motor control.",
+        true,
+        seconds: 8,
+      );
+      return;
+    }
+
     FocusScope.of(context).unfocus();
     HapticFeedback.mediumImpact();
 
     final typedCustomerName = customerNameController.text.trim();
     final motorVm = ref.read(motorViewModelProvider.notifier);
-    final motorState = ref.read(motorViewModelProvider);
 
+    // Validate before showing the command spinner.
+    if (!motorRunning && typedCustomerName.isEmpty) {
+      showMessage("Customer name is required to start motor.", true);
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        motorStateBeforePendingCommand = motorRunning;
+        isWaitingForVfdConfirmation = true;
+      });
+    }
 
     try {
-      if (motorState.isMotorOn) {
+      if (motorRunning) {
         final stoppedLog = await motorVm.stopMotor(
           deviceId: deviceId!,
           customerName: activeKhataEntry?.customerName ??
@@ -5460,33 +10532,140 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           return;
         }
 
+        final endTime = stoppedLog?.endTime;
+
+        if (endTime != null) {
+          if (mounted) {
+            setState(() {
+              serverMotorStoppedAt = endTime;
+            });
+          } else {
+            serverMotorStoppedAt = endTime;
+          }
+        }
+
+        // Do NOT close Khata or show OFF just because the stop API returned.
+        // Billing/timer stop only after VFD telemetry itself confirms OFF.
+        final vfdConfirmedOff = await _waitForVfdConfirmation(
+          expectedOn: false,
+          telemetryTimestampBeforeCommand: telemetryTimestampBeforeCommand,
+        );
+
+        if (!vfdConfirmedOff) {
+          showMessage(
+            "Stop command was sent, but OFF confirmation was not received from VFD telemetry.",
+            true,
+            seconds: 10,
+          );
+          return;
+        }
+
+        // VFD is physically OFF now. Stop the HOME timer immediately.
+        // Khata finalization is a separate server operation and must never
+        // keep the physical motor timer running.
         _stopLocalTimer();
 
-        final endTime = stoppedLog?.endTime ?? DateTime.now();
-
-        if (activeKhataEntry != null) {
-          await ref.read(khataViewModelProvider.notifier).closeMotorKhataSession(
-            entry: activeKhataEntry!,
-            endTime: endTime,
+        if (endTime == null) {
+          showMessage(
+            "Motor is OFF, but server end time is missing.",
+            true,
+            seconds: 12,
           );
-
-          activeKhataEntry = null;
+          return;
         }
 
-        await ref.read(khataViewModelProvider.notifier).loadEntries();
+        final finalServerDuration = _serverRunDurationSeconds(
+          startTime: serverMotorStartedAt,
+          endTime: endTime,
+        );
 
         if (mounted) {
-          setState(() => runSeconds = 0);
+          setState(() {
+            serverMotorStoppedAt = endTime;
+            runSeconds = finalServerDuration;
+          });
+        } else {
+          serverMotorStoppedAt = endTime;
+          runSeconds = finalServerDuration;
         }
 
-        await syncMotorCommandSilently();
+        // Do not rely only on the in-memory activeKhataEntry.
+        // It can be lost after navigation/app resume/rebuild.
+        // Reload from server and recover the real open entry if needed.
+        await ref.read(khataViewModelProvider.notifier).loadEntries();
 
-        showMessage("Motor stopped. Khata session closed.", false);
-        return;
-      }
+        final entryToClose =
+            activeKhataEntry ?? _latestOpenKhataForCurrentDevice();
 
-      if (typedCustomerName.isEmpty) {
-        showMessage("Customer name is required to start motor.", true);
+        if (entryToClose == null) {
+          activeKhataEntry = null;
+
+          showMessage(
+            "Motor stopped. No open Khata session was found to finalize.",
+            false,
+          );
+          return;
+        }
+
+        final closedEntry =
+        await ref.read(khataViewModelProvider.notifier).closeMotorKhataSession(
+          entry: entryToClose,
+          endTime: endTime,
+        );
+
+        // IMPORTANT:
+        // Never forget the open entry when the close API failed.
+        // Previous code set activeKhataEntry=null even when ViewModel
+        // returned null, leaving backend is_open=true forever.
+        if (closedEntry == null) {
+          activeKhataEntry = entryToClose;
+
+          final khataError = ref.read(khataViewModelProvider).error;
+
+          showMessage(
+            "Motor is OFF, but Khata finalization failed: "
+                "${khataError ?? "Unknown Khata close error"}",
+            true,
+            seconds: 14,
+          );
+          return;
+        }
+
+        activeKhataEntry = null;
+
+        if (mounted) {
+          setState(() {
+            _vfdSessionInterrupted = false;
+            _vfdRestartedAfterInterruption = false;
+          });
+        } else {
+          _vfdSessionInterrupted = false;
+          _vfdRestartedAfterInterruption = false;
+        }
+
+        // Reload the authoritative finalized values:
+        // ended_at, is_open=false, run_hours and recalculated bill.
+        await ref.read(khataViewModelProvider.notifier).loadEntries();
+
+        final stillOpen = _latestOpenKhataForCurrentDevice();
+
+        if (stillOpen != null &&
+            stillOpen.id == closedEntry.id) {
+          activeKhataEntry = stillOpen;
+
+          showMessage(
+            "Motor is OFF, but backend still reports this Khata as open.",
+            true,
+            seconds: 14,
+          );
+          return;
+        }
+
+        showMessage(
+          "Motor stopped. Khata finalized: "
+              "${closedEntry.runHours.toStringAsFixed(2)} hr.",
+          false,
+        );
         return;
       }
 
@@ -5494,6 +10673,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         deviceId: deviceId!,
         customerName: typedCustomerName,
       );
+      if (startedLog != null && mounted) {
+        setState(() {
+          activeTriggerType = startedLog.triggerType;
+        });
+      }
+
+      final motorCommandStartedAt = startedLog?.startTime;
+
+      if (motorCommandStartedAt != null) {
+        if (mounted) {
+          setState(() {
+            serverMotorStartedAt = motorCommandStartedAt;
+            serverMotorStoppedAt = null;
+            _vfdSessionInterrupted = false;
+            _vfdRestartedAfterInterruption = false;
+          });
+        } else {
+          serverMotorStartedAt = motorCommandStartedAt;
+          serverMotorStoppedAt = null;
+          _vfdSessionInterrupted = false;
+          _vfdRestartedAfterInterruption = false;
+        }
+      }
 
       final updatedMotorState = ref.read(motorViewModelProvider);
 
@@ -5502,24 +10704,86 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         return;
       }
 
-      if (startedLog != null) {
-        activeKhataEntry =
-        await ref.read(khataViewModelProvider.notifier).startMotorKhataSession(
-          customerName: typedCustomerName,
-          deviceId: deviceId!,
-          motorLogId: startedLog.id ?? "",
-          startTime: startedLog.startTime ?? DateTime.now(),
+      // Do NOT open Khata or show ON just because the start API returned.
+      // Billing/timer begin only after VFD telemetry itself confirms ON.
+      final vfdConfirmedOn = await _waitForVfdConfirmation(
+        expectedOn: true,
+        telemetryTimestampBeforeCommand: telemetryTimestampBeforeCommand,
+      );
+
+      if (!vfdConfirmedOn) {
+        showMessage(
+          "Start command was sent, but ON confirmation was not received from VFD telemetry.",
+          true,
+          seconds: 10,
         );
+        return;
+      }
+
+      // VFD has confirmed ON, so the motor timer must run even if
+      // Khata creation fails. Billing failure must never make the UI
+      // pretend the motor is stopped.
+      if (mounted) {
+        setState(() {
+          runSeconds = 0;
+        });
+      }
+
+      if (motorCommandStartedAt == null) {
+        showMessage(
+          "Motor is ON, but server start time is missing.",
+          true,
+          seconds: 12,
+        );
+        return;
+      }
+
+      _startLocalTimer(startedAt: motorCommandStartedAt);
+
+      // A real MotorLog UUID is mandatory for an open Khata session.
+      // run_hours is intentionally 0 while the motor is still running.
+      if (startedLog == null) {
+        showMessage(
+          "Motor is ON, but start API returned no MotorLog. Khata was not created.",
+          true,
+          seconds: 12,
+        );
+        return;
+      }
+
+      final motorLogId = startedLog.id?.trim() ?? "";
+
+      if (motorLogId.isEmpty) {
+        showMessage(
+          "Motor is ON, but MotorLog ID is missing from the start response. "
+              "Khata was not created. Check POST /motor/$deviceId/start response.",
+          true,
+          seconds: 14,
+        );
+        return;
+      }
+
+      activeKhataEntry =
+      await ref.read(khataViewModelProvider.notifier).startMotorKhataSession(
+        customerName: typedCustomerName,
+        deviceId: deviceId!,
+        motorLogId: motorLogId,
+        startTime: motorCommandStartedAt,
+      );
+
+      if (activeKhataEntry == null) {
+        final khataError = ref.read(khataViewModelProvider).error;
+
+        showMessage(
+          "Motor is ON, but Khata was not created: "
+              "${khataError ?? "Unknown Khata API error"}",
+          true,
+          seconds: 14,
+        );
+        return;
       }
 
       await ref.read(khataViewModelProvider.notifier).loadEntries();
-
-      if (mounted) {
-        setState(() => runSeconds = 0);
-      }
-
-      _startLocalTimer();
-      await syncMotorCommandSilently();
 
       showMessage("Motor started. Khata session opened.", false);
     } catch (e) {
@@ -5528,8 +10792,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         true,
         seconds: 12,
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isWaitingForVfdConfirmation = false;
+          motorStateBeforePendingCommand = null;
+        });
+      } else {
+        isWaitingForVfdConfirmation = false;
+        motorStateBeforePendingCommand = null;
+      }
     }
   }
+
   void showMessage(String text, bool isError, {int seconds = 6}) {
     if (!mounted) return;
 
@@ -5559,23 +10834,87 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     if (!hasDevice) return <String>[];
 
     final khataState = ref.watch(khataViewModelProvider);
-    final names = <String>{};
+    final names = <String>[];
+    final seen = <String>{};
 
-    for (final entry in khataState.entries) {
+    // Newest customers first. Duplicate names are removed case-insensitively.
+    for (final entry in khataState.entries.reversed) {
       final name = entry.customerName?.trim();
-      if (name != null && name.isNotEmpty) names.add(name);
+      if (name == null || name.isEmpty) continue;
+
+      final key = name.toLowerCase();
+      if (seen.add(key)) {
+        names.add(name);
+      }
     }
 
-    final list = names.toList();
-    list.sort();
-    return list;
+    return names.take(20).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final motorState = ref.watch(motorViewModelProvider);
-    final telemetryState = ref.watch(telemetryViewModelProvider);
-    final latest = hasDevice ? telemetryState.latest : null;
+    final latest = ref.watch(
+      telemetryViewModelProvider.select((state) => state.latest),
+    );
+
+    final motorLoading = ref.watch(
+      motorViewModelProvider.select((state) => state.isLoading),
+    );
+
+    final motorButtonLoading =
+        hasDevice && (motorLoading || isWaitingForVfdConfirmation);
+
+    final checkingDevice = hasDevice && !firstTelemetryLoaded;
+
+    final effectiveLatest = hasDevice && firstTelemetryLoaded ? latest : null;
+
+    final deviceOnline = checkingDevice ? false : isDeviceOnline(effectiveLatest);
+    final telemetryMotorRunning =
+    checkingDevice ? false : isMotorRunning(effectiveLatest);
+
+    final motorRunning = isWaitingForVfdConfirmation &&
+        motorStateBeforePendingCommand != null
+        ? motorStateBeforePendingCommand!
+        : telemetryMotorRunning;
+
+    final displayLatest = deviceOnline ? effectiveLatest : null;
+
+    if (motorRunning &&
+        runTimer == null &&
+        !isWaitingForVfdConfirmation &&
+        didRestoreMotorSession &&
+        !_vfdSessionInterrupted &&
+        !_vfdRestartedAfterInterruption) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && runTimer == null) {
+          _startLocalTimer(
+            startedAt: activeKhataEntry?.startTime ?? motorStartedAt,
+          );
+        }
+      });
+    }
+
+    // Never reset the run timer just because telemetry becomes stale while
+    // the app is backgrounded. Stop it only when fresh VFD telemetry says OFF.
+    if (deviceOnline &&
+        !telemetryMotorRunning &&
+        runTimer != null &&
+        !isWaitingForVfdConfirmation) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && runTimer != null) {
+          // Physical VFD is OFF. Freeze the timer at its last displayed
+          // value. Do not reset and do not invent a server end timestamp.
+          _stopLocalTimer(resetStart: false);
+
+          if (!_vfdSessionInterrupted) {
+            setState(() {
+              _vfdSessionInterrupted = true;
+              _vfdRestartedAfterInterruption = false;
+            });
+          }
+        }
+      });
+    }
 
     final width = MediaQuery.of(context).size.width;
 
@@ -5619,24 +10958,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       backgroundColor: AppColors.darkBgSoft,
       drawer: hasDevice ? ProfessionalDrawer(deviceId: deviceId!) : null,
       appBar: SmartWellHomeAppBar(
-        hasDevice: hasDevice,
-        displayName: resolvedDisplayName,
+        //hasDevice: hasDevice,
+
         onSelectDevice: () {
           Navigator.pushReplacementNamed(context, AppRoutes.devices);
         },
       ),
       body: SafeArea(
         child: RefreshIndicator(
+          color: AppColors.primary,
+          backgroundColor: AppColors.cardDark,
           onRefresh: () async {
             if (hasDevice) {
-              await syncMotorCommandSilently();
-              await loadTelemetry();
+              await loadTelemetry(showError: true);
+              await ref.read(khataViewModelProvider.notifier).loadEntries();
+              await _restoreMotorSessionFromKhata();
             } else {
               showMessage("Please select a device first.", true);
             }
           },
-          color: AppColors.primary,
-          backgroundColor: AppColors.cardDark,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(
               parent: BouncingScrollPhysics(),
@@ -5651,38 +10991,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+
                     SmartDeviceHeaderCard(
                       hasDevice: hasDevice,
+                      deviceOnline: deviceOnline,
+                      motorRunning: motorRunning,
                       displayName: resolvedDisplayName,
                       deviceId: deviceId,
-                      motorState: motorState,
+                      triggerType: activeTriggerType,
+                      runningTime: runningTime,
                     ),
-                    if (!hasDevice) ...[
-                      const SizedBox(height: 12),
-                      NoDeviceProfessionalNotice(
-                        onSelectDevice: () {
-                          Navigator.pushReplacementNamed(
-                            context,
-                            AppRoutes.devices,
-                          );
-                        },
-                      ),
-                    ],
+
                     const SizedBox(height: 18),
                     CustomerNameInputCard(
                       controller: customerNameController,
                       focusNode: customerNameFocusNode,
                       suggestions: customerSuggestions(),
-                      enabled: hasDevice,
+                      enabled: hasDevice && deviceOnline,
                     ),
                     const SizedBox(height: 26),
                     Center(
                       child: GestureDetector(
-                        onTap: motorState.isLoading ? null : toggleMotor,
+                        onTap: motorButtonLoading ? null : toggleMotor,
                         child: AnimatedBuilder(
                           animation: pulseAnimation,
                           builder: (context, child) {
-                            final scale = motorState.isMotorOn
+                            final scale = motorButtonLoading
+                                ? 1.0
+                                : motorRunning
                                 ? 1.0 + ((pulseAnimation.value - 1.0) * 0.28)
                                 : 1.0;
 
@@ -5693,18 +11029,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           },
                           child: MotorCommandButton(
                             hasDevice: hasDevice,
-                            isOn: motorState.isMotorOn,
-                            loading: hasDevice && motorState.isLoading,
+                            deviceOnline: deviceOnline,
+                            isOn: motorRunning,
+                            loading: motorButtonLoading,
                             size: buttonSize,
                           ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 18),
-                    MotorCommandStatusText(
+                    MotorRunStatusCard(
                       hasDevice: hasDevice,
-                      isOn: motorState.isMotorOn,
+                      deviceOnline: deviceOnline,
+                      isOn: motorRunning,
+                      waitingForVfd: isWaitingForVfdConfirmation,
                       runningTime: runningTime,
+                      serverStartTime:
+                      _formatServerDateTime(serverMotorStartedAt),
+                      serverEndTime:
+                      _formatServerDateTime(serverMotorStoppedAt),
+                      hasServerStartTime: serverMotorStartedAt != null,
+                      hasServerEndTime: serverMotorStoppedAt != null,
+                      vfdSessionInterrupted: _vfdSessionInterrupted,
+                      vfdRestartedAfterInterruption:
+                      _vfdRestartedAfterInterruption,
                     ),
                     const SizedBox(height: 22),
                     ParameterGridSection(
@@ -5714,43 +11062,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         ParameterMetric(
                           icon: Icons.sync_rounded,
                           title: "Frequency",
-                          value: formatValue(latest?.freq, "Hz"),
+                          value: formatValue(displayLatest?.freq, "Hz"),
                           highlight: true,
                         ),
                         ParameterMetric(
                           icon: Icons.bolt_rounded,
                           title: "Voltage",
-                          value: formatValue(latest?.voltage, "V"),
+                          value: formatValue(displayLatest?.voltage, "V"),
                         ),
                         ParameterMetric(
                           icon: Icons.flash_on_rounded,
                           title: "Current",
-                          value: formatValue(latest?.current, "A"),
+                          value: formatValue(displayLatest?.current, "A"),
                         ),
                         ParameterMetric(
                           icon: Icons.power_rounded,
                           title: "Power",
-                          value: formatValue(latest?.power, "kW"),
+                          value: formatValue(displayLatest?.power, "kW"),
                         ),
                         ParameterMetric(
                           icon: Icons.speed_rounded,
                           title: "Load",
-                          value: formatValue(latest?.powerPercent, "%"),
+                          value: formatValue(
+                            displayLatest?.powerPercent,
+                            "%",
+                          ),
                         ),
                         ParameterMetric(
                           icon: Icons.rotate_right_rounded,
                           title: "Motor Speed",
-                          value: formatValue(latest?.motorSpeed, "RPM"),
+                          value: formatValue(
+                            displayLatest?.motorSpeed,
+                            "RPM",
+                          ),
                         ),
                         ParameterMetric(
                           icon: Icons.battery_charging_full_rounded,
                           title: "DC Bus",
-                          value: formatValue(latest?.dcbus, "V"),
+                          value: formatValue(displayLatest?.dcbus, "V"),
                         ),
                         ParameterMetric(
                           icon: Icons.electric_meter_rounded,
                           title: "Energy",
-                          value: formatValue(latest?.energyIn, "kWh"),
+                          value: formatValue(
+                            displayLatest?.energyIn,
+                            "kWh",
+                          ),
                         ),
                       ],
                     ),
@@ -5767,14 +11124,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
 class SmartWellHomeAppBar extends StatelessWidget
     implements PreferredSizeWidget {
-  final bool hasDevice;
-  final String displayName;
+ // final bool hasDevice;
+ // final bool deviceOnline;
   final VoidCallback onSelectDevice;
 
   const SmartWellHomeAppBar({
     super.key,
-    required this.hasDevice,
-    required this.displayName,
+   // required this.hasDevice,
+    //required this.deviceOnline,
     required this.onSelectDevice,
   });
 
@@ -5783,12 +11140,20 @@ class SmartWellHomeAppBar extends StatelessWidget
 
   @override
   Widget build(BuildContext context) {
-    return
-      AppBar(
-      backgroundColor: AppColors.primaryDark,
-      elevation: 0,
+    // final statusText = !hasDevice
+    //     ? "No device selected"
+    //     : "Waiting for device";
+    //
+    // final statusColor = !hasDevice
+    //     ? AppColors.white.withOpacity(0.55)
+    //     : AppColors.warning;
+
+    return AppBar(
+      backgroundColor: AppColors.primaryDark.withOpacity(1),
+      elevation: 2,
+      shadowColor: Colors.black.withOpacity(0.18),
       centerTitle: false,
-      automaticallyImplyLeading: hasDevice,
+      //automaticallyImplyLeading: hasDevice,
       iconTheme: const IconThemeData(color: AppColors.white),
       titleSpacing: 18,
       title: Row(
@@ -5799,9 +11164,11 @@ class SmartWellHomeAppBar extends StatelessWidget
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
               gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
                 colors: [
-                  AppColors.darkBgSoft,
-                  AppColors.darkBgSoft.withOpacity(0.72),
+                  AppColors.primaryDark,
+                  AppColors.primary,
                 ],
               ),
             ),
@@ -5827,15 +11194,17 @@ class SmartWellHomeAppBar extends StatelessWidget
                     fontWeight: FontWeight.w900,
                   ),
                 ),
+                const SizedBox(height: 2),
                 // Text(
-                //   hasDevice ? displayName : "Professional Motor Automation",
+                // //  statusText,
                 //   maxLines: 1,
                 //   overflow: TextOverflow.ellipsis,
                 //   style: TextStyle(
-                //     color: AppColors.white.withOpacity(0.55),
+                //   //  color: statusColor,
                 //     fontSize: 11.5,
-                //     fontWeight: FontWeight.w700,
+                //     fontWeight: FontWeight.w800,
                 //   ),
+                // ),
               ],
             ),
           ),
@@ -5850,9 +11219,9 @@ class SmartWellHomeAppBar extends StatelessWidget
             icon: Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.cardDark,
+                color: AppColors.cardDark.withOpacity(0.94),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.borderDark),
+                border: Border.all(color: AppColors.white.withOpacity(0.14)),
               ),
               child: const Icon(
                 Icons.devices_other_rounded,
@@ -5869,44 +11238,82 @@ class SmartWellHomeAppBar extends StatelessWidget
 
 class SmartDeviceHeaderCard extends StatelessWidget {
   final bool hasDevice;
+  final bool deviceOnline;
+  final bool motorRunning;
   final String displayName;
   final String? deviceId;
-  final MotorState motorState;
+  final String? triggerType;
+  final String runningTime;
 
   const SmartDeviceHeaderCard({
     super.key,
     required this.hasDevice,
+    required this.deviceOnline,
+    required this.motorRunning,
     required this.displayName,
     required this.deviceId,
-    required this.motorState,
+    this.triggerType,
+    required this.runningTime,
   });
+
+  String _formatTriggerType(String? value) {
+    switch (value?.toLowerCase().trim()) {
+      case 'physical':
+        return 'Physical';
+
+      case 'time':
+      case 'timer':
+        return 'Timer';
+
+      case 'schedule':
+        return 'Schedule';
+
+      case 'app':
+        return 'App';
+
+      default:
+        return '--';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final color = !hasDevice
         ? AppColors.primary
-        : motorState.isMotorOn
-        ? AppColors.green
-        : AppColors.error;
+        : !deviceOnline
+        ? AppColors.warning
+        : motorRunning
+        ? AppColors.greenDark
+        : AppColors.primary;
 
     final icon = !hasDevice
         ? Icons.hub_outlined
-        : motorState.isMotorOn
+        : !deviceOnline
+        ? Icons.wifi_tethering_error_rounded
+        : motorRunning
         ? Icons.power_settings_new_rounded
-        : Icons.power_off_rounded;
+        : Icons.verified_rounded;
 
-    final statusText = !hasDevice
-        ? "Ready to connect"
-        : motorState.isMotorOn
-        ? "Motor ON"
-        : "Motor OFF";
+    final deviceStatusText = !hasDevice
+        ? "No Device"
+        : deviceOnline
+        ? "Device Online"
+        : "Device Offline";
+
+    final tubeWellStatusText = !hasDevice
+        ? "TubeWell --"
+        : motorRunning
+        ? "TubeWell ON"
+        : "TubeWell OFF";
+
+    final triggerText = _formatTriggerType(triggerType);
 
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.cardDark,
+        color: AppColors.cardDark.withOpacity(0.94),
         borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: AppColors.borderDark),
+        border: Border.all(color: AppColors.white.withOpacity(0.14)),
         boxShadow: [
           BoxShadow(
             color: color.withOpacity(0.10),
@@ -5930,40 +11337,139 @@ class SmartDeviceHeaderCard extends StatelessWidget {
               size: 32,
             ),
           ),
+
           const SizedBox(width: 14),
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                  ),
+                // -------------------------------------------------
+                // ROW 1:
+                // Device ID | Device Online / Offline
+                // -------------------------------------------------
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        hasDevice
+                            ? (deviceId ?? "Unknown device")
+                            : "No controller selected",
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      deviceStatusText,
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: deviceOnline
+                            ? AppColors.green
+                            : AppColors.warning,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  statusText,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                  ),
+
+                const SizedBox(height: 8),
+
+                // -------------------------------------------------
+                // ROW 2:
+                // TubeWell ON/OFF | Run Time
+                // -------------------------------------------------
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        tubeWellStatusText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: motorRunning
+                              ? AppColors.green
+                              : AppColors.error,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.timer_outlined,
+                          size: 14,
+                          color: AppColors.white.withOpacity(0.55),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          "Run Time: ",
+                          style: TextStyle(
+                            color: AppColors.white.withOpacity(0.50),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          motorRunning ? runningTime : "00:00:00",
+                          style: TextStyle(
+                            color: motorRunning
+                                ? AppColors.green
+                                : AppColors.white.withOpacity(0.62),
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w900,
+                            fontFeatures: const [
+                              FontFeature.tabularFigures(),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 5),
-                Text(
-                  hasDevice ? deviceId! : "No controller selected",
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: AppColors.white.withOpacity(0.45),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
+
+                const SizedBox(height: 8),
+
+                // -------------------------------------------------
+                // ROW 3:
+                // Run By: Schedule / Physical / App / Timer
+                // -------------------------------------------------
+                Row(
+                  children: [
+                    Icon(
+                      Icons.touch_app_rounded,
+                      size: 14,
+                      color: AppColors.white.withOpacity(0.60),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      "Run By: ",
+                      style: TextStyle(
+                        color: AppColors.white.withOpacity(0.45),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      motorRunning ? triggerText : "--",
+                      style: TextStyle(
+                        color: motorRunning
+                            ? color
+                            : AppColors.white.withOpacity(0.50),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -5987,9 +11493,9 @@ class NoDeviceProfessionalNotice extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.cardDark,
+        color: AppColors.cardDark.withOpacity(0.94),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.borderDark),
+        border: Border.all(color: AppColors.white.withOpacity(0.14)),
       ),
       child: Row(
         children: [
@@ -6008,7 +11514,7 @@ class NoDeviceProfessionalNotice extends StatelessWidget {
           const SizedBox(width: 14),
           Expanded(
             child: Text(
-              "Select a device to enable motor control. Parameters are shown safely with empty values until a controller is connected.",
+              "Select a device to enable motor control. Parameters stay empty until a controller is selected.",
               style: TextStyle(
                 color: AppColors.white.withOpacity(0.68),
                 fontSize: 13.5,
@@ -6034,6 +11540,102 @@ class NoDeviceProfessionalNotice extends StatelessWidget {
   }
 }
 
+// class DeviceOfflineNotice extends StatelessWidget {
+//   final Future<void> Function() onRetry;
+//
+//   const DeviceOfflineNotice({
+//     super.key,
+//     required this.onRetry,
+//   });
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return Container(
+//       padding: const EdgeInsets.all(14),
+//       decoration: BoxDecoration(
+//         color: AppColors.warning.withOpacity(0.10),
+//         borderRadius: BorderRadius.circular(18),
+//         border: Border.all(color: AppColors.warning.withOpacity(0.24)),
+//       ),
+//       child: Row(
+//         children: [
+//           const Icon(
+//             Icons.info_outline_rounded,
+//             color: AppColors.warning,
+//             size: 22,
+//           ),
+//           const SizedBox(width: 10),
+//           // Expanded(
+//           //   child: Text(
+//           //     "Device selected. Waiting for latest live reading.",
+//           //     style: TextStyle(
+//           //       color: AppColors.white.withOpacity(0.78),
+//           //       fontSize: 12.8,
+//           //       fontWeight: FontWeight.w700,
+//           //     ),
+//           //   ),
+//           // ),
+//           // TextButton(
+//           //   onPressed: onRetry,
+//           //   child: const Text(
+//           //     "Retry",
+//           //     style: TextStyle(
+//           //       color: AppColors.warning,
+//           //       fontWeight: FontWeight.w900,
+//           //     ),
+//           //   ),
+//           // ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+
+class DeviceOnlineNotice extends StatelessWidget {
+  final bool motorRunning;
+
+  const DeviceOnlineNotice({
+    super.key,
+    required this.motorRunning,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // final text = motorRunning
+    //     ? "Live telemetry received. Motor is running."
+    //     : "Live telemetry received. Motor is stopped.";
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.darkBorderSoft,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.green.withOpacity(0.24)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.check_circle_rounded,
+            color: AppColors.green,
+            size: 22,
+          ),
+          const SizedBox(width: 10),
+          // Expanded(
+          //   child: Text(
+          //     text,
+          //     style: TextStyle(
+          //       color: AppColors.white.withOpacity(0.78),
+          //       fontSize: 12.8,
+          //       fontWeight: FontWeight.w700,
+          //     ),
+          //   ),
+          // ),
+        ],
+      ),
+    );
+  }
+}
+
 class CustomerNameInputCard extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -6050,125 +11652,257 @@ class CustomerNameInputCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RawAutocomplete<String>(
-      textEditingController: controller,
-      focusNode: focusNode,
-      optionsBuilder: (TextEditingValue value) {
-        if (!enabled) return const Iterable<String>.empty();
-
-        final input = value.text.trim().toLowerCase();
-        if (input.isEmpty) return const Iterable<String>.empty();
-
-        return suggestions.where(
-              (name) => name.toLowerCase().contains(input),
-        );
-      },
-      onSelected: (String value) {
-        controller.text = value;
-        controller.selection = TextSelection.fromPosition(
-          TextPosition(offset: controller.text.length),
-        );
-      },
-      fieldViewBuilder: (
-          context,
-          textEditingController,
-          fieldFocusNode,
-          onFieldSubmitted,
-          ) {
-        return Container(
-          decoration: BoxDecoration(
-            color: AppColors.cardDark,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: AppColors.borderDark),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 9),
+          child: Row(
+            children: [
+              Icon(
+                Icons.account_circle_outlined,
+                size: 17,
+                color: AppColors.white.withOpacity(0.48),
+              ),
+              const SizedBox(width: 7),
+              Text(
+                "CUSTOMER / KHATA",
+                style: TextStyle(
+                  color: AppColors.white.withOpacity(1),
+                  fontSize: 11,
+                  letterSpacing: 1.1,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
           ),
-          child: TextField(
-            enabled: enabled,
-            controller: textEditingController,
-            focusNode: fieldFocusNode,
-            keyboardType: TextInputType.text,
-            style: const TextStyle(
-              color: AppColors.white,
-              fontWeight: FontWeight.w700,
-            ),
-            textInputAction: TextInputAction.done,
-            decoration: InputDecoration(
-              hintText:
-              enabled ? "Customer name for Khata" : "Select a device first",
-              hintStyle: TextStyle(
-                color: AppColors.white.withOpacity(0.42),
-              ),
-              prefixIcon: Icon(
-                enabled
-                    ? Icons.person_outline_rounded
-                    : Icons.lock_outline_rounded,
-                color: AppColors.primary,
-              ),
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 18,
-                vertical: 18,
-              ),
-            ),
-          ),
-        );
-      },
-      optionsViewBuilder: (context, onSelected, options) {
-        return Align(
-          alignment: Alignment.topLeft,
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              width: MediaQuery.of(context).size.width - 36,
-              constraints: const BoxConstraints(
-                maxHeight: 240,
-                maxWidth: 560,
-              ),
-              margin: const EdgeInsets.only(top: 8),
+        ),
+        RawAutocomplete<String>(
+          textEditingController: controller,
+          focusNode: focusNode,
+          optionsBuilder: (TextEditingValue value) {
+            if (!enabled) return const Iterable<String>.empty();
+
+            final input = value.text.trim().toLowerCase();
+
+            if (input.isEmpty) {
+              return suggestions.take(8);
+            }
+
+            final startsWith = <String>[];
+            final contains = <String>[];
+
+            for (final name in suggestions) {
+              final lower = name.toLowerCase();
+              if (lower.startsWith(input)) {
+                startsWith.add(name);
+              } else if (lower.contains(input)) {
+                contains.add(name);
+              }
+            }
+
+            return [...startsWith, ...contains].take(8);
+          },
+          onSelected: (String value) {
+            controller.text = value;
+            controller.selection = TextSelection.collapsed(
+              offset: controller.text.length,
+            );
+          },
+          fieldViewBuilder: (
+              context,
+              textEditingController,
+              fieldFocusNode,
+              onFieldSubmitted,
+              ) {
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
               decoration: BoxDecoration(
-                color: AppColors.cardDark,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: AppColors.borderDark),
+                color: AppColors.cardDark.withOpacity(0.94),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: fieldFocusNode.hasFocus
+                      ? AppColors.primary.withOpacity(0.70)
+                      : AppColors.white.withOpacity(0.14),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.16),
+                    blurRadius: 16,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                shrinkWrap: true,
-                itemCount: options.length,
-                separatorBuilder: (_, __) {
-                  return Divider(
-                    height: 1,
-                    color: AppColors.white.withOpacity(0.06),
-                  );
-                },
-                itemBuilder: (context, index) {
-                  final option = options.elementAt(index);
+              child: TextField(
+                enabled: enabled,
+                controller: textEditingController,
+                focusNode: fieldFocusNode,
+                keyboardType: TextInputType.name,
+                textCapitalization: TextCapitalization.words,
+                autocorrect: false,
+                style: const TextStyle(
+                  color: AppColors.white,
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.w800,
+                ),
+                textInputAction: TextInputAction.done,
+                decoration: InputDecoration(
+                  hintText: enabled
+                      ? "Enter new or previous customer"
+                      : "Device must be online first",
+                  hintStyle: TextStyle(
+                    color: AppColors.white.withOpacity(1),
+                    fontWeight: FontWeight.w600,
+                  ),
+                  prefixIcon: Icon(
+                    enabled
+                        ? Icons.person_search_rounded
+                        : Icons.lock_outline_rounded,
+                    color: AppColors.white,
+                  ),
+                  suffixIcon: enabled && suggestions.isNotEmpty
+                      ? Tooltip(
+                    message: "Previous customers available",
+                    child: Icon(
+                      Icons.history_rounded,
+                      color: AppColors.white.withOpacity(1),
+                    ),
+                  )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 18,
+                  ),
+                ),
+              ),
+            );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            final optionList = options.toList();
 
-                  return ListTile(
-                    dense: true,
-                    leading: const Icon(
-                      Icons.person_rounded,
-                      color: AppColors.primary,
-                    ),
-                    title: Text(
-                      option,
-                      style: const TextStyle(
-                        color: AppColors.white,
-                        fontWeight: FontWeight.w800,
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  width: MediaQuery.of(context).size.width - 36,
+                  constraints: const BoxConstraints(
+                    maxHeight: 290,
+                    maxWidth: 560,
+                  ),
+                  margin: const EdgeInsets.only(top: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardDark.withOpacity(0.94),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: AppColors.white.withOpacity(0.14)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.28),
+                        blurRadius: 24,
+                        offset: const Offset(0, 12),
                       ),
-                    ),
-                    onTap: () => onSelected(option),
-                  );
-                },
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.history_rounded,
+                              color: AppColors.primary,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              "Previous customers",
+                              style: TextStyle(
+                                color: AppColors.white.withOpacity(0.62),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Flexible(
+                        child: ListView.separated(
+                          padding: const EdgeInsets.only(bottom: 7),
+                          shrinkWrap: true,
+                          itemCount: optionList.length,
+                          separatorBuilder: (_, __) => Divider(
+                            height: 1,
+                            color: AppColors.white.withOpacity(0.06),
+                          ),
+                          itemBuilder: (context, index) {
+                            final option = optionList[index];
+
+                            return ListTile(
+                              dense: true,
+                              leading: Container(
+                                height: 34,
+                                width: 34,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withOpacity(0.10),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.person_rounded,
+                                  color: AppColors.primary,
+                                  size: 18,
+                                ),
+                              ),
+                              title: Text(
+                                option,
+                                style: const TextStyle(
+                                  color: AppColors.white,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              trailing: Icon(
+                                Icons.north_west_rounded,
+                                size: 17,
+                                color: AppColors.white.withOpacity(0.30),
+                              ),
+                              onTap: () => onSelected(option),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        if (enabled)
+          Padding(
+            padding: const EdgeInsets.only(left: 5, top: 8),
+            child: Text(
+              suggestions.isEmpty
+                  ? "New customer names will appear here next time."
+                  : "Type to search, or select a previously used customer.",
+              style: TextStyle(
+                color: AppColors.white.withOpacity(1),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
-        );
-      },
+      ],
     );
   }
 }
 
 class MotorCommandButton extends StatelessWidget {
   final bool hasDevice;
+  final bool deviceOnline;
   final bool isOn;
   final bool loading;
   final double size;
@@ -6176,6 +11910,7 @@ class MotorCommandButton extends StatelessWidget {
   const MotorCommandButton({
     super.key,
     required this.hasDevice,
+    required this.deviceOnline,
     required this.isOn,
     required this.loading,
     required this.size,
@@ -6185,21 +11920,29 @@ class MotorCommandButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final activeColor = !hasDevice
         ? AppColors.primary
+        : !deviceOnline
+        ? AppColors.warning
         : isOn
         ? AppColors.green
         : AppColors.error;
 
     final label = !hasDevice
-        ? "READY"
+        ? "SELECT"
+        : !deviceOnline
+        ? "WAIT"
         : isOn
         ? "ON"
         : "OFF";
 
     final icon = !hasDevice
         ? Icons.devices_other_rounded
+        : !deviceOnline
+        ? Icons.wifi_tethering_error_rounded
         : isOn
         ? Icons.power_settings_new_rounded
         : Icons.power_off_rounded;
+
+    final textColor = !hasDevice ? AppColors.black : AppColors.white;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -6231,7 +11974,7 @@ class MotorCommandButton extends StatelessWidget {
         children: [
           Icon(
             icon,
-            color: hasDevice ? AppColors.white : AppColors.black,
+            color: textColor,
             size: size < 190 ? 36 : 42,
           ),
           const SizedBox(height: 8),
@@ -6239,8 +11982,10 @@ class MotorCommandButton extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                color: hasDevice ? AppColors.white : AppColors.black,
-                fontSize: label == "READY"
+                color: textColor,
+                fontSize: label == "SELECT"
+                    ? 24
+                    : label == "WAIT"
                     ? 24
                     : size < 190
                     ? 26
@@ -6255,33 +12000,185 @@ class MotorCommandButton extends StatelessWidget {
   }
 }
 
-class MotorCommandStatusText extends StatelessWidget {
+class MotorRunStatusCard extends StatelessWidget {
   final bool hasDevice;
+  final bool deviceOnline;
   final bool isOn;
+  final bool waitingForVfd;
   final String runningTime;
+  final String serverStartTime;
+  final String serverEndTime;
+  final bool hasServerStartTime;
+  final bool hasServerEndTime;
+  final bool vfdSessionInterrupted;
+  final bool vfdRestartedAfterInterruption;
 
-  const MotorCommandStatusText({
+  const MotorRunStatusCard({
     super.key,
     required this.hasDevice,
+    required this.deviceOnline,
     required this.isOn,
+    required this.waitingForVfd,
     required this.runningTime,
+    required this.serverStartTime,
+    required this.serverEndTime,
+    required this.hasServerStartTime,
+    required this.hasServerEndTime,
+    required this.vfdSessionInterrupted,
+    required this.vfdRestartedAfterInterruption,
   });
 
   @override
   Widget build(BuildContext context) {
-    final text = !hasDevice
-        ? "Select a device to activate motor control"
-        : isOn
-        ? "Motor running | $runningTime"
-        : "Motor stopped";
+    final active = hasDevice && deviceOnline && isOn;
 
-    return Text(
-      text,
-      textAlign: TextAlign.center,
-      style: TextStyle(
-        color: AppColors.white.withOpacity(0.76),
-        fontSize: 16,
-        fontWeight: FontWeight.w700,
+    final title = !hasDevice
+        ? "NO DEVICE"
+        : !deviceOnline
+        ? "WAITING FOR DEVICE"
+        : waitingForVfd
+        ? "SYNCING WITH VFD"
+        : vfdRestartedAfterInterruption
+        ? "VFD RESTARTED"
+        : vfdSessionInterrupted
+        ? "VFD SESSION INTERRUPTED"
+        : active
+        ? "MOTOR RUN TIME"
+        : "MOTOR STOPPED";
+
+    final subtitle = !hasDevice
+        ? "Select a controller to start monitoring"
+        : !deviceOnline
+        ? "Waiting for fresh live telemetry"
+        : waitingForVfd
+        ? "Waiting for the VFD to confirm the command"
+        : vfdRestartedAfterInterruption
+        ? "Motor is physically ON, but old runtime stays frozen. OFF then ON to start a clean new server session."
+        : vfdSessionInterrupted
+        ? "VFD stopped outside the normal app OFF flow. Runtime is frozen and will not restart automatically."
+        : active
+        ? "Elapsed time from the original server/database start time"
+        : "Timer starts only after VFD confirms ON";
+
+    final accent = active ? AppColors.green : AppColors.primary;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+      decoration: BoxDecoration(
+        color: AppColors.cardDark.withOpacity(0.94),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: active
+              ? AppColors.green.withOpacity(0.28)
+              : AppColors.white.withOpacity(0.14),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            height: 44,
+            width: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: accent.withOpacity(0.11),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: waitingForVfd
+                ? SizedBox(
+              height: 21,
+              width: 21,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.4,
+                color: accent,
+              ),
+            )
+                : Icon(
+              active ? Icons.timer_rounded : Icons.timer_off_outlined,
+              color: accent,
+              size: 23,
+            ),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: AppColors.white.withOpacity(0.54),
+                    fontSize: 10.5,
+                    letterSpacing: 0.9,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppColors.white.withOpacity(0.60),
+                    fontSize: 11.8,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (hasServerStartTime) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    "ON: $serverStartTime",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: AppColors.green.withOpacity(0.88),
+                      fontSize: 10.8,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+                if (hasServerStartTime) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    hasServerEndTime
+                        ? "OFF: $serverEndTime"
+                        : "OFF: Running",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: hasServerEndTime
+                          ? AppColors.error.withOpacity(0.88)
+                          : AppColors.white.withOpacity(0.52),
+                      fontSize: 10.8,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            active ||
+                hasServerEndTime ||
+                vfdSessionInterrupted ||
+                vfdRestartedAfterInterruption
+                ? runningTime
+                : "00:00:00",
+            style: TextStyle(
+              color: active && !vfdRestartedAfterInterruption
+                  ? AppColors.green
+                  : vfdSessionInterrupted ||
+                  vfdRestartedAfterInterruption
+                  ? AppColors.warning
+                  : hasServerEndTime
+                  ? AppColors.primary
+                  : AppColors.white.withOpacity(0.42),
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -6345,12 +12242,12 @@ class ParameterMetricCard extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(compact ? 13 : 17),
       decoration: BoxDecoration(
-        color: AppColors.cardDark,
+        color: AppColors.cardDark.withOpacity(0.94),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: metric.highlight
-              ? AppColors.primary.withOpacity(0.38)
-              : AppColors.borderDark,
+              ? AppColors.primary
+              : AppColors.white,
         ),
         boxShadow: [
           BoxShadow(
@@ -6365,8 +12262,9 @@ class ParameterMetricCard extends StatelessWidget {
         children: [
           Icon(
             metric.icon,
-            color:
-            metric.highlight ? AppColors.primary : AppColors.white.withOpacity(0.45),
+            color: metric.highlight
+                ? AppColors.primary
+                : AppColors.white.withOpacity(0.45),
             size: compact ? 24 : 28,
           ),
           const Spacer(),
@@ -6375,7 +12273,7 @@ class ParameterMetricCard extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: AppColors.white.withOpacity(0.62),
+              color: AppColors.white,
               fontSize: compact ? 12.5 : 14,
               fontWeight: FontWeight.w700,
             ),
@@ -6399,3 +12297,4 @@ class ParameterMetricCard extends StatelessWidget {
     );
   }
 }
+

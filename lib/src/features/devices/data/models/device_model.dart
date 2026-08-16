@@ -35,7 +35,7 @@ class DeviceModel {
   }
 
   factory DeviceModel.fromJson(Map<String, dynamic> json) {
-    final rawOnline = json["is_online"];
+    final rawOnline = json["is_online"] ?? json["online"] ?? json["is_live"];
 
     final bool isOnlineValue =
         rawOnline == true ||

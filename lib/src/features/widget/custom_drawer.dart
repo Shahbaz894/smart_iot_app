@@ -167,14 +167,9 @@ class ProfessionalDrawer extends ConsumerWidget {
                     },
                   ),
 
-                  _divider(),
-
-                  // =========================
-                  // CONTACT
-                  // =========================
+                  //
 
 
-                  _divider(),
 
                   _drawerTile(
                     context,
@@ -256,6 +251,26 @@ class ProfessionalDrawer extends ConsumerWidget {
 
                   _drawerTile(
                     context,
+                    title: "VFD Schedule",
+                    icon: Icons.settings_remote_rounded,
+                    onTap: () {
+                      if (!_validateDevice(context)) return;
+
+                      Navigator.pop(context);
+
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ScheduleScreen(
+                            deviceId: deviceId,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+
+                  _drawerTile(
+                    context,
                     title: "Motor Fault",
                     icon: Icons.analytics_rounded,
                     onTap: () {
@@ -313,7 +328,7 @@ class ProfessionalDrawer extends ConsumerWidget {
                   ),
 
 
-                  _divider(),
+
                   _drawerTile(
                     context,
                     title: "Contact Us",
@@ -355,69 +370,20 @@ class ProfessionalDrawer extends ConsumerWidget {
                       );
                     },
                   ),
-                  // Consumer(
-                  //   builder: (context, ref, child) {
-                  //     final themeMode = ref.watch(themeProvider);
-                  //     final isDark = themeMode == ThemeMode.dark;
-                  //
-                  //     return Padding(
-                  //       padding: const EdgeInsets.symmetric(
-                  //         horizontal: 10,
-                  //         vertical: 4,
-                  //       ),
-                  //       child: Container(
-                  //         padding: const EdgeInsets.symmetric(
-                  //           horizontal: 14,
-                  //           vertical: 10,
-                  //         ),
-                  //         decoration: BoxDecoration(
-                  //           color: Colors.white.withOpacity(0.04),
-                  //           borderRadius: BorderRadius.circular(14),
-                  //           border: Border.all(
-                  //             color: Colors.white.withOpacity(0.06),
-                  //           ),
-                  //         ),
-                  //         child: Row(
-                  //           children: [
-                  //
-                  //             Icon(
-                  //               isDark
-                  //                   ? Icons.dark_mode_rounded
-                  //                   : Icons.light_mode_rounded,
-                  //               color: AppColors.primary,
-                  //               size: 22,
-                  //             ),
-                  //
-                  //             const SizedBox(width: 18),
-                  //
-                  //             const Expanded(
-                  //               child: Text(
-                  //                 "Dark Mode",
-                  //                 style: TextStyle(
-                  //                   color: Colors.white,
-                  //                   fontSize: 14,
-                  //                   fontWeight: FontWeight.w600,
-                  //                 ),
-                  //               ),
-                  //             ),
-                  //
-                  //             Switch(
-                  //               value: isDark,
-                  //               activeColor: AppColors.primary,
-                  //               onChanged: (value) {
-                  //                 ref
-                  //                     .read(themeProvider.notifier)
-                  //                     .state = value
-                  //                     ? ThemeMode.dark
-                  //                     : ThemeMode.light;
-                  //               },
-                  //             ),
-                  //           ],
-                  //         ),
-                  //       ),
-                  //     );
-                  //   },
-                  // ),
+                  _drawerTile(
+                    context,
+                    title: "Website",
+                    icon: Icons.language_rounded,
+                    onTap: () async {
+                      Navigator.pop(context);
+
+                      await _openUrl(
+                        context,
+                        "https://arduinoexpert.com",
+                      );
+                    },
+                  ),
+
 
                   _drawerTile(
                     context,
@@ -451,7 +417,7 @@ class ProfessionalDrawer extends ConsumerWidget {
                     child: Column(
                       children: [
                         Text(
-                          "SMART WELL",
+                          "AabNex",
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.5),
                             fontSize: 11,

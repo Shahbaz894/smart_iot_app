@@ -1,130 +1,8 @@
-// class TelemetryModel {
-//   final String? id;
-//   final String? deviceId;
-//   final int? isLive;
-//
-//   final double? voltage;
-//   final double? current;
-//   final double? freq;
-//   final double? power;
-//   final double? powerPercent;
-//   final double? torquePercent;
-//   final double? motorSpeed;
-//   final double? dcbus;
-//   final double? energyIn;
-//
-//   final int? fault;
-//   final int? faultCode;
-//   final int? statusCode;
-//
-//   final int? timestamp;
-//   final double? referenceFreq;
-//
-//   TelemetryModel({
-//     this.id,
-//     this.deviceId,
-//     this.isLive,
-//     this.voltage,
-//     this.current,
-//     this.freq,
-//     this.power,
-//     this.powerPercent,
-//     this.torquePercent,
-//     this.motorSpeed,
-//     this.dcbus,
-//     this.energyIn,
-//     this.fault,
-//     this.faultCode,
-//     this.statusCode,
-//     this.timestamp,
-//     this.referenceFreq
-//   });
-//
-//   /// Creates a copy of this TelemetryModel but with the given fields replaced
-//   /// with the new values.
-//   TelemetryModel copyWith({
-//     String? id,
-//     String? deviceId,
-//     int? isLive,
-//     double? voltage,
-//     double? current,
-//     double? freq,
-//     double? power,
-//     double? powerPercent,
-//     double? torquePercent,
-//     double? motorSpeed,
-//     double? dcbus,
-//     double? energyIn,
-//     int? fault,
-//     int? faultCode,
-//     int? statusCode,
-//     int? timestamp,
-//     double?referenceFreq
-//   }) {
-//     return TelemetryModel(
-//       id: id ?? this.id,
-//       deviceId: deviceId ?? this.deviceId,
-//       isLive: isLive ?? this.isLive,
-//       voltage: voltage ?? this.voltage,
-//       current: current ?? this.current,
-//       freq: freq ?? this.freq,
-//       power: power ?? this.power,
-//       powerPercent: powerPercent ?? this.powerPercent,
-//       torquePercent: torquePercent ?? this.torquePercent,
-//       motorSpeed: motorSpeed ?? this.motorSpeed,
-//       dcbus: dcbus ?? this.dcbus,
-//       energyIn: energyIn ?? this.energyIn,
-//       fault: fault ?? this.fault,
-//       faultCode: faultCode ?? this.faultCode,
-//       statusCode: statusCode ?? this.statusCode,
-//       timestamp: timestamp ?? this.timestamp,
-//       referenceFreq: referenceFreq ?? this.referenceFreq
-//     );
-//   }
-//
-//   factory TelemetryModel.fromJson(Map<String, dynamic> json) {
-//     double? toDouble(dynamic value) {
-//       if (value == null) return null;
-//       return double.tryParse(value.toString());
-//     }
-//
-//     int? toInt(dynamic value) {
-//       if (value == null) return null;
-//       return int.tryParse(value.toString());
-//     }
-//
-//     return TelemetryModel(
-//       id: json["id"]?.toString(),
-//       deviceId: json["device_id"]?.toString(),
-//
-//       isLive: toInt(json["is_live"]),
-//
-//       voltage: toDouble(json["voltage"]),
-//       current: toDouble(json["current"]),
-//       freq: toDouble(json["freq"]),
-//       power: toDouble(json["power"]),
-//       powerPercent: toDouble(json["power_percent"]),
-//       torquePercent: toDouble(json["torque_percent"]),
-//       motorSpeed: toDouble(json["motor_speed"]),
-//       dcbus: toDouble(json["dcbus"]),
-//       energyIn: toDouble(json["energy_in"]),
-//
-//       fault: toInt(json["fault"]),
-//       faultCode: toInt(json["fault_code"]),
-//       statusCode: toInt(json["status_code"]),
-//
-//       timestamp: toInt(json["timestamp"]),
-//
-//       referenceFreq: toDouble(
-//         json["reference_freq"] ?? json["referenceFreq"],
-//       ),
-//     );
-//   }
-// }
 class TelemetryModel {
   final String? id;
   final String? deviceId;
   final int? isLive;
+
   final double? voltage;
   final double? current;
   final double? freq;
@@ -134,13 +12,17 @@ class TelemetryModel {
   final double? motorSpeed;
   final double? dcbus;
   final double? energyIn;
+
   final int? fault;
   final int? faultCode;
   final int? statusCode;
+
   final int? timestamp;
+  final DateTime? createdAt;
+
   final double? referenceFreq;
 
-  TelemetryModel({
+  const TelemetryModel({
     this.id,
     this.deviceId,
     this.isLive,
@@ -157,57 +39,10 @@ class TelemetryModel {
     this.faultCode,
     this.statusCode,
     this.timestamp,
+    this.createdAt,
     this.referenceFreq,
   });
 
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is TelemetryModel &&
-        other.id == id &&
-        other.deviceId == deviceId &&
-        other.isLive == isLive &&
-        other.voltage == voltage &&
-        other.current == current &&
-        other.freq == freq &&
-        other.power == power &&
-        other.powerPercent == powerPercent &&
-        other.torquePercent == torquePercent &&
-        other.motorSpeed == motorSpeed &&
-        other.dcbus == dcbus &&
-        other.energyIn == energyIn &&
-        other.fault == fault &&
-        other.faultCode == faultCode &&
-        other.statusCode == statusCode &&
-        other.timestamp == timestamp &&
-        other.referenceFreq == referenceFreq;
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    deviceId,
-    isLive,
-    voltage,
-    current,
-    freq,
-    power,
-    powerPercent,
-    torquePercent,
-    motorSpeed,
-    dcbus,
-    energyIn,
-    fault,
-    faultCode,
-    statusCode,
-    timestamp,
-    referenceFreq,
-  );
-
-// keep your existing copyWith and fromJson unchanged
-
-  /// Creates a copy of this TelemetryModel but with the given fields replaced
-//   /// with the new values.
   TelemetryModel copyWith({
     String? id,
     String? deviceId,
@@ -225,7 +60,8 @@ class TelemetryModel {
     int? faultCode,
     int? statusCode,
     int? timestamp,
-    double?referenceFreq
+    DateTime? createdAt,
+    double? referenceFreq,
   }) {
     return TelemetryModel(
       id: id ?? this.id,
@@ -244,47 +80,136 @@ class TelemetryModel {
       faultCode: faultCode ?? this.faultCode,
       statusCode: statusCode ?? this.statusCode,
       timestamp: timestamp ?? this.timestamp,
-      referenceFreq: referenceFreq ?? this.referenceFreq
+      createdAt: createdAt ?? this.createdAt,
+      referenceFreq: referenceFreq ?? this.referenceFreq,
     );
   }
 
-
   factory TelemetryModel.fromJson(Map<String, dynamic> json) {
-    double? toDouble(dynamic value) {
-      if (value == null) return null;
-      return double.tryParse(value.toString());
-    }
-
-    int? toInt(dynamic value) {
-      if (value == null) return null;
-      return int.tryParse(value.toString());
-    }
-
     return TelemetryModel(
-      id: json["id"]?.toString(),
-      deviceId: json["device_id"]?.toString(),
+      id: _readString(json, ["id"]),
+      deviceId: _readString(json, ["device_id", "device_uid", "deviceId"]),
 
-      isLive: toInt(json["is_live"]),
+      isLive: _readInt(json, ["is_live", "isLive"]),
 
-      voltage: toDouble(json["voltage"]),
-      current: toDouble(json["current"]),
-      freq: toDouble(json["freq"]),
-      power: toDouble(json["power"]),
-      powerPercent: toDouble(json["power_percent"]),
-      torquePercent: toDouble(json["torque_percent"]),
-      motorSpeed: toDouble(json["motor_speed"]),
-      dcbus: toDouble(json["dcbus"]),
-      energyIn: toDouble(json["energy_in"]),
+      voltage: _readDouble(json, ["voltage"]),
+      current: _readDouble(json, ["current"]),
+      freq: _readDouble(json, ["freq", "frequency"]),
+      power: _readDouble(json, ["power"]),
+      powerPercent: _readDouble(json, ["power_percent", "powerPercent"]),
+      torquePercent: _readDouble(json, ["torque_percent", "torquePercent"]),
+      motorSpeed: _readDouble(json, ["motor_speed", "motorSpeed"]),
+      dcbus: _readDouble(json, ["dcbus", "dc_bus", "dcBus"]),
+      energyIn: _readDouble(json, ["energy_in", "energyIn"]),
 
-      fault: toInt(json["fault"]),
-      faultCode: toInt(json["fault_code"]),
-      statusCode: toInt(json["status_code"]),
+      fault: _readInt(json, ["fault"]),
+      faultCode: _readInt(json, ["fault_code", "faultCode"]),
+      statusCode: _readInt(json, ["status_code", "statusCode"]),
 
-      timestamp: toInt(json["timestamp"]),
+      timestamp: _readInt(json, ["timestamp", "time"]),
+      createdAt: _readDateTime(json, ["created_at", "createdAt"]),
 
-      referenceFreq: toDouble(
-        json["reference_freq"] ?? json["referenceFreq"],
+      referenceFreq: _readDouble(
+        json,
+        ["reference_freq", "referenceFreq"],
       ),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      "id": id,
+      "device_id": deviceId,
+      "is_live": isLive,
+      "voltage": voltage,
+      "current": current,
+      "freq": freq,
+      "power": power,
+      "power_percent": powerPercent,
+      "torque_percent": torquePercent,
+      "motor_speed": motorSpeed,
+      "dcbus": dcbus,
+      "energy_in": energyIn,
+      "fault": fault,
+      "fault_code": faultCode,
+      "status_code": statusCode,
+      "timestamp": timestamp,
+      "created_at": createdAt?.toUtc().toIso8601String(),
+      "reference_freq": referenceFreq,
+    };
+  }
+
+  bool isFresh({
+    int withinSeconds = 20,
+  }) {
+    final nowSeconds = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+
+    if (createdAt != null) {
+      final createdAtSeconds =
+          createdAt!.toUtc().millisecondsSinceEpoch ~/ 1000;
+
+      final diff = nowSeconds - createdAtSeconds;
+
+      return diff >= 0 && diff <= withinSeconds;
+    }
+
+    if (timestamp == null || timestamp! <= 1700000000) {
+      return false;
+    }
+
+    final diff = nowSeconds - timestamp!;
+
+    return diff >= 0 && diff <= withinSeconds;
+  }
+
+  static dynamic _readValue(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      if (json.containsKey(key) && json[key] != null) {
+        return json[key];
+      }
+    }
+    return null;
+  }
+
+  static String? _readString(Map<String, dynamic> json, List<String> keys) {
+    final value = _readValue(json, keys);
+    if (value == null) return null;
+
+    final text = value.toString().trim();
+    if (text.isEmpty) return null;
+
+    return text;
+  }
+
+  static int? _readInt(Map<String, dynamic> json, List<String> keys) {
+    final value = _readValue(json, keys);
+    if (value == null) return null;
+
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is num) return value.toInt();
+
+    return int.tryParse(value.toString());
+  }
+
+  static double? _readDouble(Map<String, dynamic> json, List<String> keys) {
+    final value = _readValue(json, keys);
+    if (value == null) return null;
+
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is num) return value.toDouble();
+
+    return double.tryParse(value.toString());
+  }
+
+  static DateTime? _readDateTime(
+      Map<String, dynamic> json,
+      List<String> keys,
+      ) {
+    final value = _readValue(json, keys);
+    if (value == null) return null;
+
+    return DateTime.tryParse(value.toString())?.toUtc();
   }
 }

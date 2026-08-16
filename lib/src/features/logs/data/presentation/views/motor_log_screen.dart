@@ -36,7 +36,7 @@ class _MotorLogScreenState extends ConsumerState<MotorLogScreen> {
     if (selectedFilter == "all") return logs;
 
     return logs.where((log) {
-      return (log.triggerType ?? "").toLowerCase() == selectedFilter;
+      return _triggerCategory(log.triggerType) == selectedFilter;
     }).toList();
   }
 
@@ -220,15 +220,19 @@ class _MotorLogScreenState extends ConsumerState<MotorLogScreen> {
                       manual: state.logs
                           .where(
                             (log) =>
-                        (log.triggerType ?? "").toLowerCase() ==
-                            "manual",
+                        _triggerCategory(log.triggerType) == "manual",
                       )
                           .length,
                       schedule: state.logs
                           .where(
                             (log) =>
-                        (log.triggerType ?? "").toLowerCase() ==
-                            "schedule",
+                        _triggerCategory(log.triggerType) == "schedule",
+                      )
+                          .length,
+                      timer: state.logs
+                          .where(
+                            (log) =>
+                        _triggerCategory(log.triggerType) == "timer",
                       )
                           .length,
                     ),
@@ -296,150 +300,18 @@ class _MotorLogScreenState extends ConsumerState<MotorLogScreen> {
   }
 }
 
-// class _LogSummary extends StatelessWidget {
-//   final int total;
-//   final int manual;
-//   final int schedule;
-//
-//   const _LogSummary({
-//     required this.total,
-//     required this.manual,
-//     required this.schedule,
-//   });
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return LayoutBuilder(
-//       builder: (context, constraints) {
-//         final width = constraints.maxWidth;
-//
-//         final crossAxisCount = width >= 720
-//             ? 3
-//             : width >= 460
-//             ? 3
-//             : 1;
-//
-//         final childAspectRatio = width >= 720
-//             ? 2.25
-//             : width >= 460
-//             ? 1.55
-//             : 3.4;
-//
-//         return GridView.count(
-//           shrinkWrap: true,
-//           physics: const NeverScrollableScrollPhysics(),
-//           crossAxisCount: crossAxisCount,
-//           crossAxisSpacing: 10,
-//           mainAxisSpacing: 10,
-//           childAspectRatio: childAspectRatio,
-//           children: [
-//             _SummaryTile(
-//               title: "Total",
-//               value: "$total",
-//               icon: Icons.list_alt_rounded,
-//             ),
-//             _SummaryTile(
-//               title: "Manual",
-//               value: "$manual",
-//               icon: Icons.touch_app_rounded,
-//             ),
-//             _SummaryTile(
-//               title: "Schedule",
-//               value: "$schedule",
-//               icon: Icons.schedule_rounded,
-//             ),
-//           ],
-//         );
-//       },
-//     );
-//   }
-// }
-//
-// class _SummaryTile extends StatelessWidget {
-//   final String title;
-//   final String value;
-//   final IconData icon;
-//
-//   const _SummaryTile({
-//     required this.title,
-//     required this.value,
-//     required this.icon,
-//   });
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return Container(
-//       constraints: const BoxConstraints(minHeight: 82),
-//       padding: const EdgeInsets.symmetric(
-//         horizontal: 14,
-//         vertical: 12,
-//       ),
-//       decoration: BoxDecoration(
-//         color: AppColors.cardDark,
-//         borderRadius: BorderRadius.circular(20),
-//         border: Border.all(color: Colors.white.withOpacity(0.07)),
-//       ),
-//       child: Row(
-//         children: [
-//           Container(
-//             height: 42,
-//             width: 42,
-//             decoration: BoxDecoration(
-//               color: AppColors.primary.withOpacity(0.12),
-//               borderRadius: BorderRadius.circular(14),
-//             ),
-//             child: Icon(
-//               icon,
-//               color: AppColors.primary,
-//               size: 24,
-//             ),
-//           ),
-//           const SizedBox(width: 12),
-//           Expanded(
-//             child: Column(
-//               mainAxisAlignment: MainAxisAlignment.center,
-//               crossAxisAlignment: CrossAxisAlignment.start,
-//               children: [
-//                 Text(
-//                   title,
-//                   maxLines: 1,
-//                   overflow: TextOverflow.ellipsis,
-//                   style: TextStyle(
-//                     color: AppColors.white.withOpacity(0.58),
-//                     fontWeight: FontWeight.w700,
-//                     fontSize: 13,
-//                   ),
-//                 ),
-//                 const SizedBox(height: 4),
-//                 FittedBox(
-//                   fit: BoxFit.scaleDown,
-//                   alignment: Alignment.centerLeft,
-//                   child: Text(
-//                     value,
-//                     style: const TextStyle(
-//                       color: Colors.white,
-//                       fontSize: 22,
-//                       fontWeight: FontWeight.w900,
-//                     ),
-//                   ),
-//                 ),
-//               ],
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }
+
 class _LogSummary extends StatelessWidget {
   final int total;
   final int manual;
   final int schedule;
+  final int timer;
 
   const _LogSummary({
     required this.total,
     required this.manual,
     required this.schedule,
+    required this.timer,
   });
 
   @override
@@ -477,6 +349,14 @@ class _LogSummary extends StatelessWidget {
               title: "Schedule",
               value: "$schedule",
               icon: Icons.schedule_rounded,
+            ),
+          ),
+          SizedBox(width: gap),
+          Expanded(
+            child: _SummaryTile(
+              title: "Timer",
+              value: "$timer",
+              icon: Icons.timer_outlined,
             ),
           ),
         ],
@@ -598,6 +478,12 @@ class _FilterBar extends StatelessWidget {
             selected: selected,
             onChanged: onChanged,
           ),
+          _LogChip(
+            label: "Timer",
+            value: "timer",
+            selected: selected,
+            onChanged: onChanged,
+          ),
         ],
       ),
     );
@@ -640,8 +526,9 @@ class _MotorLogCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final trigger = (log.triggerType ?? "manual").toLowerCase();
+    final trigger = _triggerCategory(log.triggerType);
     final isSchedule = trigger == "schedule";
+    final isTimer = trigger == "timer";
     final isRunning = log.endTime == null;
 
     final start = log.startTime;
@@ -697,13 +584,22 @@ class _MotorLogCard extends StatelessWidget {
             runSpacing: 8,
             children: [
               _Tag(
-                text: isSchedule ? "SCHEDULE" : "MANUAL",
-                color: isSchedule ? Colors.orange : AppColors.primary,
+                text: isSchedule
+                    ? "SCHEDULE"
+                    : isTimer
+                    ? "TIMER"
+                    : "MANUAL",
+                color: isSchedule
+                    ? Colors.orange
+                    : isTimer
+                    ? AppColors.green
+                    : AppColors.primary,
               ),
               _Tag(
                 text: isRunning ? "RUNNING" : "STOPPED",
                 color: isRunning ? AppColors.green : Colors.redAccent,
               ),
+
             ],
           ),
           const SizedBox(height: 14),
@@ -858,12 +754,54 @@ class _EmptyLogs extends StatelessWidget {
   }
 }
 
+String _triggerCategory(String? triggerType) {
+  final value = (triggerType ?? "").trim().toLowerCase();
+
+  if (value == "schedule") {
+    return "schedule";
+  }
+
+  if (value == "timer" || value == "time") {
+    return "timer";
+  }
+
+  // App/manual/physical/unknown trigger types are shown as Manual.
+  return "manual";
+}
+DateTime _toPakistanTime(DateTime value) {
+  // If backend timestamp already has UTC information, use it directly.
+  if (value.isUtc) {
+    return value.add(const Duration(hours: 5));
+  }
+
+  // Backend is sending UTC time without "Z".
+  // Dart parsed it as local time, so reinterpret the SAME components as UTC.
+  final serverUtc = DateTime.utc(
+    value.year,
+    value.month,
+    value.day,
+    value.hour,
+    value.minute,
+    value.second,
+    value.millisecond,
+    value.microsecond,
+  );
+
+  return serverUtc.add(const Duration(hours: 5));
+}
+
 String _formatDate(DateTime? value) {
   if (value == null) return "-";
-  return DateFormat("yyyy-MM-dd").format(value.toLocal());
+
+  final pakistanTime = _toPakistanTime(value);
+
+  return DateFormat("yyyy-MM-dd").format(pakistanTime);
 }
 
 String _formatTime(DateTime? value) {
   if (value == null) return "-";
-  return DateFormat("hh:mm a").format(value.toLocal());
+
+  final pakistanTime = _toPakistanTime(value);
+
+  return "${DateFormat("hh:mm:ss a").format(pakistanTime)} PKT";
 }

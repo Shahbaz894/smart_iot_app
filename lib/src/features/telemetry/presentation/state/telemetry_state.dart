@@ -1,37 +1,5 @@
 import "../../data/models/telemetry_model.dart";
-//
-// class TelemetryState {
-//   final bool isLoading;
-//   final bool isRefreshing;
-//   final String? error;
-//   final TelemetryModel? latest;
-//   final List<TelemetryModel> records;
-//
-//   const TelemetryState({
-//     this.isLoading = false,
-//     this.isRefreshing = false,
-//     this.error,
-//     this.latest,
-//     this.records = const [],
-//   });
-//
-//   TelemetryState copyWith({
-//     bool? isLoading,
-//     bool? isRefreshing,
-//     String? error,
-//     bool clearError = false,      // ← explicit intent to clear error
-//     TelemetryModel? latest,
-//     List<TelemetryModel>? records,
-//   }) {
-//     return TelemetryState(
-//       isLoading: isLoading ?? this.isLoading,
-//       isRefreshing: isRefreshing ?? this.isRefreshing,
-//       error: clearError ? null : (error ?? this.error),  // ← fixed
-//       latest: latest ?? this.latest,
-//       records: records ?? this.records,
-//     );
-//   }
-// }
+
 class TelemetryState {
   final bool isLoading;
   final bool isRefreshing;

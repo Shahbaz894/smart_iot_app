@@ -128,7 +128,7 @@ class _SplashScreenState extends State<SplashScreen>
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(28),
+                            borderRadius: BorderRadius.circular(120),
                             boxShadow: [
                               BoxShadow(
                                 color: const Color(0xFF00E5FF).withOpacity(0.12),
@@ -142,11 +142,23 @@ class _SplashScreenState extends State<SplashScreen>
                               ),
                             ],
                           ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(20),
-                            child: Image.asset(
-                              "assets/images/aabnex_device.jpeg",
-                              fit: BoxFit.contain,
+                          child:
+                          SizedBox(
+                            width: 200,
+                            height: 200,
+                            child: FittedBox(
+                              fit: BoxFit.fill,
+                              child: CircleAvatar(
+                                radius: 150,
+                                backgroundColor: Colors.white,
+                                child: CircleAvatar(
+                                  radius: 400,
+                                  backgroundColor: Colors.transparent,
+                                  backgroundImage: const AssetImage(
+                                    "assets/images/aabnex_device.jpeg",
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),

@@ -134,10 +134,11 @@ class ApiEndpoints {
     return "/vfd/${Uri.encodeComponent(deviceId)}/reference-frequency";
   }
 // Schedule
-// REMOVED trailing slash to avoid 307 redirect issues with FastAPI POST requests
-  static const String schedule = "/schedule";
+// Backend POST endpoint requires trailing slash.
+// Using /schedule without the slash causes FastAPI 307 redirect.
+  static const String schedule = "/schedule/";
 
-// UPDATED to map correctly to your backend's {device_uid} parameter structure
+// GET/DELETE device-specific endpoint
   static String scheduleByDevice(String deviceId) {
     return "/schedule/${Uri.encodeComponent(deviceId)}";
   }
@@ -164,19 +165,19 @@ class ApiEndpoints {
   /// KHATA
   /// =======================
 
-  /// Get logged-in user khata entries
-  static const String khata = "/khata";
+  /// Get/Create logged-in user's Khata entries.
+  /// Backend FastAPI route is /khata/
+  static const String khata = "/khata/";
 
-  /// DO NOT USE
-  /// /khata/me returns user profile, not entries
-  static const String khataMe = "/khata";
+  /// Same Khata collection endpoint.
+  static const String khataMe = "/khata/";
 
-  /// Single entry by id
+  /// Single entry by ID
   static String khataById(String entryId) {
     return "/khata/${Uri.encodeComponent(entryId)}";
   }
 
-  /// Add payment to entry
+  /// Add payment
   static String khataPayment(String entryId) {
     return "/khata/${Uri.encodeComponent(entryId)}/payment";
   }

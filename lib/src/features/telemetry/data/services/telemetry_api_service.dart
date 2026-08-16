@@ -50,18 +50,90 @@ class TelemetryApiService {
   ///
   /// Backend route:
   /// GET /telemetry/{deviceId}/latest
+  // Future<TelemetryModel?> getLatestTelemetry({
+  //   required String deviceId,
+  // }) async {
+  //   try {
+  //     final response = await apiClient.dio.get(
+  //       ApiEndpoints.latestTelemetry(deviceId),
+  //     );
+  //
+  //     final data = response.data;
+  //
+  //     print("LATEST TELEMETRY DEVICE: $deviceId");
+  //     print("LATEST TELEMETRY RAW: $data");
+  //
+  //     if (data == null) return null;
+  //
+  //     if (data is List) {
+  //       if (data.isEmpty) return null;
+  //
+  //       final item = data.first;
+  //
+  //       if (item is Map<String, dynamic>) {
+  //         return TelemetryModel.fromJson(item);
+  //       }
+  //
+  //       if (item is Map) {
+  //         return TelemetryModel.fromJson(
+  //           Map<String, dynamic>.from(item),
+  //         );
+  //       }
+  //
+  //       return null;
+  //     }
+  //
+  //     if (data is Map<String, dynamic>) {
+  //       final inner = data["data"] ?? data["telemetry"] ?? data["latest"];
+  //
+  //       if (inner is Map<String, dynamic>) {
+  //         return TelemetryModel.fromJson(inner);
+  //       }
+  //
+  //       if (inner is Map) {
+  //         return TelemetryModel.fromJson(
+  //           Map<String, dynamic>.from(inner),
+  //         );
+  //       }
+  //
+  //       return TelemetryModel.fromJson(data);
+  //     }
+  //
+  //     if (data is Map) {
+  //       return TelemetryModel.fromJson(
+  //         Map<String, dynamic>.from(data),
+  //       );
+  //     }
+  //
+  //     return null;
+  //   } on DioException catch (e) {
+  //     throw apiClient.handleError(e);
+  //   } catch (e) {
+  //     throw AppException(
+  //       message: "Failed to fetch latest telemetry: ${e.toString()}",
+  //     );
+  //   }
+  // }
   Future<TelemetryModel?> getLatestTelemetry({
     required String deviceId,
   }) async {
     try {
-      final response = await apiClient.dio.get(
-        ApiEndpoints.latestTelemetry(deviceId),
-      );
+      final endpoint = ApiEndpoints.latestTelemetry(deviceId);
+
+      print("===== TELEMETRY API DEBUG =====");
+      print("DIO BASE URL: ${apiClient.dio.options.baseUrl}");
+      print("ENDPOINT: $endpoint");
+      print("FULL URL: ${apiClient.dio.options.baseUrl}$endpoint");
+      print("DEVICE ID: $deviceId");
+      print("===============================");
+
+      final response = await apiClient.dio.get(endpoint);
+
+      print("TELEMETRY STATUS CODE: ${response.statusCode}");
+      print("LATEST TELEMETRY DEVICE: $deviceId");
+      print("LATEST TELEMETRY RAW: ${response.data}");
 
       final data = response.data;
-
-      print("LATEST TELEMETRY DEVICE: $deviceId");
-      print("LATEST TELEMETRY RAW: $data");
 
       if (data == null) return null;
 
@@ -107,8 +179,16 @@ class TelemetryApiService {
 
       return null;
     } on DioException catch (e) {
+      print("TELEMETRY DIO ERROR TYPE: ${e.type}");
+      print("TELEMETRY DIO ERROR MESSAGE: ${e.message}");
+      print("TELEMETRY DIO STATUS: ${e.response?.statusCode}");
+      print("TELEMETRY DIO BODY: ${e.response?.data}");
+      print("TELEMETRY DIO URL: ${e.requestOptions.uri}");
+
       throw apiClient.handleError(e);
     } catch (e) {
+      print("TELEMETRY UNKNOWN ERROR: $e");
+
       throw AppException(
         message: "Failed to fetch latest telemetry: ${e.toString()}",
       );

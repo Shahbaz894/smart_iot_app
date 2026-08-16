@@ -1,13 +1,21 @@
+// import "dart:async";
+//
 // import "package:flutter/material.dart";
 // import "package:flutter_riverpod/flutter_riverpod.dart";
+// import "package:smart_iot_app/src/core/constant/app_color.dart";
+// import "package:smart_iot_app/src/features/telemetry/presentation/providers/telemetry_providers.dart";
+//
+// import "../../../../core/utils/app_theme_colours.dart";
+// import "../../data/models/khata_entry_model.dart";
+// import "../providers/ khata_providers.dart";
+// import "../state/khata_state.dart";
+//
+// // TODO: update this import path according to your project structure.
+//
 //
 // import "../../data/models/khata_entry_model.dart";
 // import "../providers/ khata_providers.dart";
-//
 // import "../state/khata_state.dart";
-//
-//
-//
 //
 // class KhataScreen extends ConsumerStatefulWidget {
 //   final String deviceId;
@@ -24,44 +32,224 @@
 // class _KhataScreenState extends ConsumerState<KhataScreen> {
 //   final TextEditingController searchController = TextEditingController();
 //
+//   Timer? _runningTimer;
+//   Timer? _telemetrySyncTimer;
+//
 //   String query = "";
 //   String selectedStatus = "all";
+//
+//   bool _checkingTelemetry = false;
+//   bool _hasFreshTelemetry = false;
+//   bool _motorConfirmedRunning = false;
+//   bool _finalizingKhataFromTelemetry = false;
+//
+//   // Freeze the visible Khata timer at the first fresh VFD OFF confirmation.
+//   DateTime? _confirmedMotorStopAt;
 //
 //   @override
 //   void initState() {
 //     super.initState();
 //
-//     Future.microtask(() {
-//       ref.read(khataViewModelProvider.notifier).loadEntries();
+//     Future.microtask(() async {
+//       await ref.read(khataViewModelProvider.notifier).loadEntries();
+//
+//       if (!mounted) return;
+//
+//       await _syncMotorStateAndKhata();
 //     });
+//
+//     // UI timer. It advances only for the current device while the VFD is
+//     // not positively confirming OFF.
+//     _runningTimer = Timer.periodic(
+//       const Duration(seconds: 1),
+//           (_) {
+//         if (!mounted) return;
+//
+//         final currentDeviceId = widget.deviceId.trim();
+//
+//         final hasOpenSession = ref
+//             .read(khataViewModelProvider)
+//             .entries
+//             .any(
+//               (entry) =>
+//           entry.deviceId.trim() == currentDeviceId &&
+//               entry.isOpen &&
+//               entry.startTime != null &&
+//               entry.endTime == null,
+//         );
+//
+//         if (!hasOpenSession) return;
+//
+//         // Fresh VFD OFF is authoritative for the visible Khata clock.
+//         if (_hasFreshTelemetry && !_motorConfirmedRunning) {
+//           return;
+//         }
+//
+//         setState(() {});
+//       },
+//     );
+//
+//     // Keep the Khata screen synchronized with VFD state.
+//     // The guard in _syncMotorStateAndKhata prevents overlapping requests.
+//     _telemetrySyncTimer = Timer.periodic(
+//       const Duration(seconds: 1),
+//           (_) => _syncMotorStateAndKhata(),
+//     );
 //   }
 //
 //   @override
 //   void dispose() {
+//     _runningTimer?.cancel();
+//     _telemetrySyncTimer?.cancel();
 //     searchController.dispose();
 //     super.dispose();
 //   }
 //
-//   Future<void> _refresh() {
-//     return ref.read(khataViewModelProvider.notifier).loadEntries();
+//   int _toInt(dynamic value) {
+//     if (value == null) return 0;
+//     if (value is int) return value;
+//     if (value is double) return value.toInt();
+//     if (value is num) return value.toInt();
+//     return int.tryParse(value.toString()) ?? 0;
 //   }
 //
-//   List<KhataEntryModel> _deviceEntries(List<KhataEntryModel> entries) {
-//     final selectedDeviceId = widget.deviceId.trim().toLowerCase();
+//   bool _isDeviceOnline(dynamic latest) {
+//     if (latest == null) return false;
 //
-//     if (selectedDeviceId.isEmpty) {
-//       return [];
+//     final live = _toInt(latest.isLive) == 1;
+//     final fresh = latest.isFresh(withinSeconds: 20);
+//
+//     return live && fresh;
+//   }
+//
+//   bool _isMotorRunning(dynamic latest) {
+//     if (!_isDeviceOnline(latest)) return false;
+//
+//     final statusCode = _toInt(latest.statusCode);
+//
+//     return statusCode == 1 || statusCode == 2;
+//   }
+//
+//   KhataEntryModel? _latestOpenKhataForCurrentDevice() {
+//     final currentDeviceId = widget.deviceId.trim();
+//
+//     if (currentDeviceId.isEmpty) return null;
+//
+//     final entries = ref.read(khataViewModelProvider).entries;
+//
+//     KhataEntryModel? latestOpen;
+//
+//     for (final entry in entries) {
+//       if (entry.deviceId.trim() != currentDeviceId) continue;
+//       if (!entry.isOpen) continue;
+//       if (entry.startTime == null) continue;
+//       if (entry.endTime != null) continue;
+//
+//       if (latestOpen == null ||
+//           entry.startTime!.isAfter(latestOpen.startTime!)) {
+//         latestOpen = entry;
+//       }
 //     }
 //
-//     return entries.where((entry) {
-//       return entry.deviceId.trim().toLowerCase() == selectedDeviceId;
-//     }).toList();
+//     return latestOpen;
+//   }
+//
+//   Future<void> _syncMotorStateAndKhata() async {
+//     if (_checkingTelemetry) return;
+//
+//     final currentDeviceId = widget.deviceId.trim();
+//
+//     if (currentDeviceId.isEmpty) return;
+//
+//     _checkingTelemetry = true;
+//
+//     try {
+//       await ref
+//           .read(telemetryViewModelProvider.notifier)
+//           .loadLatest(
+//         currentDeviceId,
+//         showLoading: false,
+//       );
+//
+//       if (!mounted) return;
+//
+//       final latest = ref.read(telemetryViewModelProvider).latest;
+//       final hasFreshTelemetry = _isDeviceOnline(latest);
+//
+//       // Missing/stale telemetry is NOT a confirmed OFF state.
+//       if (!hasFreshTelemetry) {
+//         if (_hasFreshTelemetry) {
+//           setState(() {
+//             _hasFreshTelemetry = false;
+//           });
+//         }
+//         return;
+//       }
+//
+//       final motorRunning = _isMotorRunning(latest);
+//
+//       setState(() {
+//         _hasFreshTelemetry = true;
+//         _motorConfirmedRunning = motorRunning;
+//
+//         if (motorRunning) {
+//           _confirmedMotorStopAt = null;
+//         } else {
+//           _confirmedMotorStopAt ??= DateTime.now();
+//         }
+//       });
+//
+//       // Fresh VFD OFF: first let HomeScreen/backend state catch up.
+//       if (!motorRunning) {
+//         await ref.read(khataViewModelProvider.notifier).loadEntries();
+//
+//         if (!mounted) return;
+//
+//         final openEntry = _latestOpenKhataForCurrentDevice();
+//
+//         // Fallback: VFD is definitely OFF but Khata still says open.
+//         // Finalize it once so billing cannot continue indefinitely.
+//         if (openEntry != null && !_finalizingKhataFromTelemetry) {
+//           _finalizingKhataFromTelemetry = true;
+//
+//           try {
+//             final stopAt = _confirmedMotorStopAt ?? DateTime.now();
+//
+//             final closedEntry = await ref
+//                 .read(khataViewModelProvider.notifier)
+//                 .closeMotorKhataSession(
+//               entry: openEntry,
+//               endTime: stopAt,
+//             );
+//
+//             if (closedEntry != null) {
+//               await ref
+//                   .read(khataViewModelProvider.notifier)
+//                   .loadEntries();
+//             }
+//           } finally {
+//             _finalizingKhataFromTelemetry = false;
+//           }
+//         }
+//       }
+//     } catch (_) {
+//       // Never convert a connectivity/telemetry error into a fake OFF state.
+//     } finally {
+//       _checkingTelemetry = false;
+//     }
+//   }
+//
+//   Future<void> _refresh() async {
+//     await ref.read(khataViewModelProvider.notifier).loadEntries();
+//
+//     if (!mounted) return;
+//
+//     await _syncMotorStateAndKhata();
 //   }
 //
 //   List<KhataEntryModel> _filteredEntries(List<KhataEntryModel> entries) {
 //     final search = query.trim().toLowerCase();
 //
-//     // var result = _deviceEntries(entries);
 //     var result = entries;
 //
 //     if (selectedStatus != "all") {
@@ -70,9 +258,7 @@
 //       }).toList();
 //     }
 //
-//     if (search.isEmpty) {
-//       return result;
-//     }
+//     if (search.isEmpty) return result;
 //
 //     return result.where((entry) {
 //       return entry.customerName.toLowerCase().contains(search) ||
@@ -89,28 +275,36 @@
 //       }) {
 //     if (!mounted) return;
 //
-//     ScaffoldMessenger.of(context).clearSnackBars();
+//     // Do not mutate Scaffold/Overlay while a bottom-sheet/dialog route is
+//     // being deactivated. Schedule the snackbar for the next safe frame.
+//     WidgetsBinding.instance.addPostFrameCallback((_) {
+//       if (!mounted) return;
 //
-//     ScaffoldMessenger.of(context).showSnackBar(
-//       SnackBar(
-//         duration: Duration(seconds: isError ? seconds : 4),
-//         behavior: SnackBarBehavior.floating,
-//         margin: const EdgeInsets.all(16),
-//         elevation: 10,
-//         shape: RoundedRectangleBorder(
-//           borderRadius: BorderRadius.circular(16),
-//         ),
-//         backgroundColor:
-//         isError ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
-//         content: Text(
-//           message,
-//           style: const TextStyle(
-//             color: Colors.white,
-//             fontWeight: FontWeight.w800,
+//       final messenger = ScaffoldMessenger.maybeOf(context);
+//       if (messenger == null) return;
+//
+//       messenger.hideCurrentSnackBar();
+//
+//       messenger.showSnackBar(
+//         SnackBar(
+//           duration: Duration(seconds: isError ? seconds : 4),
+//           behavior: SnackBarBehavior.floating,
+//           margin: const EdgeInsets.all(16),
+//           elevation: 10,
+//           shape: RoundedRectangleBorder(
+//             borderRadius: BorderRadius.circular(16),
+//           ),
+//           backgroundColor: isError ? AppColors.error : AppColors.success,
+//           content: Text(
+//             message,
+//             style: const TextStyle(
+//               color: AppColors.white,
+//               fontWeight: FontWeight.w800,
+//             ),
 //           ),
 //         ),
-//       ),
-//     );
+//       );
+//     });
 //   }
 //
 //   Future<void> _showPriceSheet(KhataEntryModel entry) async {
@@ -128,20 +322,24 @@
 //       backgroundColor: Colors.transparent,
 //       builder: (context) {
 //         final bottom = MediaQuery.of(context).viewInsets.bottom;
-//         final colors = _KhataColors.of(context);
 //
 //         return _KhataBottomSheet(
 //           bottom: bottom,
-//           colors: colors,
 //           title: "Calculate Bill",
-//           subtitle: "Run hours: ${entry.runHours.toStringAsFixed(2)}",
+//           subtitle: entry.isOpen
+//               ? "Running time: ${_displayRunTime(
+//             entry,
+//             hasFreshTelemetry: _hasFreshTelemetry,
+//             motorConfirmedRunning: _motorConfirmedRunning,
+//             confirmedMotorStopAt: _confirmedMotorStopAt,
+//           )}"
+//               : "Run hours: ${entry.runHours.toStringAsFixed(2)}",
 //           children: [
 //             _SheetField(
 //               controller: priceController,
 //               label: "Price per hour",
 //               icon: Icons.price_change_outlined,
 //               keyboardType: TextInputType.number,
-//               colors: colors,
 //             ),
 //             const SizedBox(height: 12),
 //             _SheetField(
@@ -149,23 +347,14 @@
 //               label: "Cash received",
 //               icon: Icons.payments_outlined,
 //               keyboardType: TextInputType.number,
-//               colors: colors,
 //             ),
 //             const SizedBox(height: 16),
 //             _PrimarySheetButton(
 //               icon: Icons.calculate_rounded,
 //               label: "Calculate Bill",
-//               colors: colors,
 //               onPressed: () {
-//                 final price = double.tryParse(
-//                   priceController.text.trim(),
-//                 ) ??
-//                     0;
-//
-//                 final cash = double.tryParse(
-//                   cashController.text.trim(),
-//                 ) ??
-//                     0;
+//                 final price = double.tryParse(priceController.text.trim()) ?? 0;
+//                 final cash = double.tryParse(cashController.text.trim()) ?? 0;
 //
 //                 Navigator.pop(
 //                   context,
@@ -181,16 +370,31 @@
 //       },
 //     );
 //
-//     priceController.dispose();
-//     cashController.dispose();
+//     if (result == null) {
+//       await Future<void>.delayed(const Duration(milliseconds: 250));
+//       priceController.dispose();
+//       cashController.dispose();
+//       return;
+//     }
 //
-//     if (result == null) return;
+//     // Allow the modal route/keyboard overlay to finish deactivating before
+//     // Riverpod updates the screen and the snackbar is shown.
+//     await Future<void>.delayed(const Duration(milliseconds: 250));
+//
+//     if (!mounted) {
+//       priceController.dispose();
+//       cashController.dispose();
+//       return;
+//     }
 //
 //     await ref.read(khataViewModelProvider.notifier).updatePriceAndBill(
 //       entry: entry,
 //       pricePerHour: result.pricePerHour,
 //       cashReceived: result.cashReceived,
 //     );
+//
+//     priceController.dispose();
+//     cashController.dispose();
 //   }
 //
 //   Future<void> _showPaymentSheet(KhataEntryModel entry) async {
@@ -199,14 +403,12 @@
 //     final amount = await showModalBottomSheet<double>(
 //       context: context,
 //       isScrollControlled: true,
-//       backgroundColor: Colors.indigo,
+//       backgroundColor: Colors.transparent,
 //       builder: (context) {
 //         final bottom = MediaQuery.of(context).viewInsets.bottom;
-//         final colors = _KhataColors.of(context);
 //
 //         return _KhataBottomSheet(
 //           bottom: bottom,
-//           colors: colors,
 //           title: "Add Payment",
 //           subtitle: entry.customerName,
 //           children: [
@@ -215,19 +417,15 @@
 //               label: "Amount received",
 //               icon: Icons.payments_outlined,
 //               keyboardType: TextInputType.number,
-//               colors: colors,
 //             ),
 //             const SizedBox(height: 16),
 //             _PrimarySheetButton(
 //               icon: Icons.check_rounded,
 //               label: "Save Payment",
-//               colors: colors,
+//               color: AppColors.green,
+//               foregroundColor: AppColors.white,
 //               onPressed: () {
-//                 final value = double.tryParse(
-//                   amountController.text.trim(),
-//                 ) ??
-//                     0;
-//
+//                 final value = double.tryParse(amountController.text.trim()) ?? 0;
 //                 Navigator.pop(context, value);
 //               },
 //             ),
@@ -236,14 +434,25 @@
 //       },
 //     );
 //
-//     amountController.dispose();
+//     if (amount == null) {
+//       await Future<void>.delayed(const Duration(milliseconds: 250));
+//       amountController.dispose();
+//       return;
+//     }
 //
-//     if (amount == null) return;
+//     await Future<void>.delayed(const Duration(milliseconds: 250));
+//
+//     if (!mounted) {
+//       amountController.dispose();
+//       return;
+//     }
 //
 //     await ref.read(khataViewModelProvider.notifier).addPayment(
 //       entry: entry,
 //       amount: amount,
 //     );
+//
+//     amountController.dispose();
 //   }
 //
 //   Future<void> _showEditSheet(KhataEntryModel entry) async {
@@ -264,11 +473,9 @@
 //       backgroundColor: Colors.transparent,
 //       builder: (context) {
 //         final bottom = MediaQuery.of(context).viewInsets.bottom;
-//         final colors = _KhataColors.of(context);
 //
 //         return _KhataBottomSheet(
 //           bottom: bottom,
-//           colors: colors,
 //           title: "Update Khata Entry",
 //           subtitle: "Edit customer, hours, rate, and received cash",
 //           children: [
@@ -276,7 +483,6 @@
 //               controller: nameController,
 //               label: "Customer name",
 //               icon: Icons.person_outline_rounded,
-//               colors: colors,
 //             ),
 //             const SizedBox(height: 12),
 //             _SheetField(
@@ -284,7 +490,6 @@
 //               label: "Run hours",
 //               icon: Icons.timer_outlined,
 //               keyboardType: TextInputType.number,
-//               colors: colors,
 //             ),
 //             const SizedBox(height: 12),
 //             _SheetField(
@@ -292,7 +497,6 @@
 //               label: "Price per hour",
 //               icon: Icons.price_change_outlined,
 //               keyboardType: TextInputType.number,
-//               colors: colors,
 //             ),
 //             const SizedBox(height: 12),
 //             _SheetField(
@@ -300,13 +504,11 @@
 //               label: "Cash received",
 //               icon: Icons.payments_outlined,
 //               keyboardType: TextInputType.number,
-//               colors: colors,
 //             ),
 //             const SizedBox(height: 16),
 //             _PrimarySheetButton(
 //               icon: Icons.save_rounded,
 //               label: "Update Entry",
-//               colors: colors,
 //               onPressed: () {
 //                 final name = nameController.text.trim();
 //                 final hours = double.tryParse(hoursController.text.trim()) ?? 0;
@@ -338,14 +540,31 @@
 //       },
 //     );
 //
+//     if (updated == null) {
+//       await Future<void>.delayed(const Duration(milliseconds: 250));
+//       nameController.dispose();
+//       hoursController.dispose();
+//       priceController.dispose();
+//       cashController.dispose();
+//       return;
+//     }
+//
+//     await Future<void>.delayed(const Duration(milliseconds: 250));
+//
+//     if (!mounted) {
+//       nameController.dispose();
+//       hoursController.dispose();
+//       priceController.dispose();
+//       cashController.dispose();
+//       return;
+//     }
+//
+//     await ref.read(khataViewModelProvider.notifier).updateEntry(updated);
+//
 //     nameController.dispose();
 //     hoursController.dispose();
 //     priceController.dispose();
 //     cashController.dispose();
-//
-//     if (updated == null) return;
-//
-//     await ref.read(khataViewModelProvider.notifier).updateEntry(updated);
 //   }
 //
 //   Future<void> _confirmDelete(KhataEntryModel entry) async {
@@ -356,27 +575,35 @@
 //       return;
 //     }
 //
-//     final colors = _KhataColors.of(context);
+//     if (entry.isOpen) {
+//       _showSnack(
+//         "Stop the motor and finalize this Khata session before deleting it.",
+//         true,
+//       );
+//       return;
+//     }
 //
 //     final confirmed = await showDialog<bool>(
 //       context: context,
 //       builder: (context) {
 //         return AlertDialog(
-//           backgroundColor: colors.card,
+//           backgroundColor: AppThemeColors.card(context),
 //           shape: RoundedRectangleBorder(
 //             borderRadius: BorderRadius.circular(22),
 //           ),
 //           title: Text(
 //             "Delete Khata entry?",
 //             style: TextStyle(
-//               color: colors.text,
+//               color: AppThemeColors.text(context),
 //               fontWeight: FontWeight.w900,
 //             ),
 //           ),
 //           content: Text(
-//             "This will permanently delete the entry for ${entry.customerName}.",
+//             entry.isOpen
+//                 ? "This motor session is still open and cannot be deleted until it stops."
+//                 : "This will permanently delete the entry for ${entry.customerName}, including any unpaid balance.",
 //             style: TextStyle(
-//               color: colors.secondaryText,
+//               color: AppThemeColors.subText(context),
 //               fontWeight: FontWeight.w600,
 //             ),
 //           ),
@@ -385,13 +612,13 @@
 //               onPressed: () => Navigator.pop(context, false),
 //               child: Text(
 //                 "Cancel",
-//                 style: TextStyle(color: colors.secondaryText),
+//                 style: TextStyle(color: AppThemeColors.subText(context)),
 //               ),
 //             ),
 //             FilledButton.icon(
 //               style: FilledButton.styleFrom(
-//                 backgroundColor: colors.danger,
-//                 foregroundColor: Colors.white,
+//                 backgroundColor: AppColors.error,
+//                 foregroundColor: AppColors.white,
 //               ),
 //               onPressed: () => Navigator.pop(context, true),
 //               icon: const Icon(Icons.delete_outline_rounded),
@@ -423,10 +650,16 @@
 //     );
 //
 //     final state = ref.watch(khataViewModelProvider);
-//     final colors = _KhataColors.of(context);
 //
-//     final deviceEntries = state.entries;
-//     final entries = _filteredEntries(state.entries);
+//     // final deviceEntries = state.entries;
+//     // final entries = _filteredEntries(state.entries);
+//     final safeDeviceId = widget.deviceId.trim();
+//
+//     final deviceEntries = state.entries.where((entry) {
+//       return entry.deviceId.trim() == safeDeviceId;
+//     }).toList();
+//
+//     final entries = _filteredEntries(deviceEntries);
 //
 //     final totalBill = entries.fold<double>(
 //       0,
@@ -447,31 +680,34 @@
 //     final isWide = width >= 850;
 //
 //     return Scaffold(
-//       backgroundColor: colors.background,
+//       backgroundColor: AppThemeColors.background(context),
 //       appBar: AppBar(
-//         backgroundColor: colors.appBar,
-//         foregroundColor: Colors.white,
+//         backgroundColor: AppColors.primaryDark,
+//         foregroundColor: AppThemeColors.appBarText(context),
 //         elevation: 0,
 //         centerTitle: false,
 //         titleSpacing: 0,
-//         title: const Column(
-//           crossAxisAlignment: CrossAxisAlignment.start,
+//         title: Column(
+//           crossAxisAlignment: CrossAxisAlignment.center,
+//           mainAxisAlignment: MainAxisAlignment.center,
 //           children: [
 //             Text(
 //               "Khata",
 //               style: TextStyle(
-//                 color: Colors.white,
+//                 color: AppThemeColors.appBarText(context),
 //                 fontWeight: FontWeight.w900,
 //                 fontSize: 21,
 //               ),
 //             ),
-//             SizedBox(height: 2),
-//             Text(
-//               "Customer billing and balances",
-//               style: TextStyle(
-//                 color: Color(0xFFE0F2FE),
-//                 fontSize: 12,
-//                 fontWeight: FontWeight.w700,
+//             const SizedBox(height: 2),
+//             Center(
+//               child: Text(
+//                 "Customer billing and balances",
+//                 style: TextStyle(
+//                   color: AppThemeColors.subText(context),
+//                   fontSize: 12,
+//                   fontWeight: FontWeight.w700,
+//                 ),
 //               ),
 //             ),
 //           ],
@@ -486,7 +722,8 @@
 //       ),
 //       body: SafeArea(
 //         child: RefreshIndicator(
-//           color: colors.primary,
+//           color: AppColors.primary,
+//           backgroundColor: AppThemeColors.surface(context),
 //           onRefresh: _refresh,
 //           child: SingleChildScrollView(
 //             physics: const AlwaysScrollableScrollPhysics(
@@ -503,7 +740,6 @@
 //                   crossAxisAlignment: CrossAxisAlignment.stretch,
 //                   children: [
 //                     _DeviceHeader(
-//                       colors: colors,
 //                       deviceId: widget.deviceId,
 //                       count: deviceEntries.length,
 //                     ),
@@ -513,11 +749,9 @@
 //                       totalReceived: totalReceived,
 //                       totalRemaining: totalRemaining,
 //                       count: entries.length,
-//                       colors: colors,
 //                     ),
 //                     const SizedBox(height: 16),
 //                     _SearchAndFilters(
-//                       colors: colors,
 //                       searchController: searchController,
 //                       selectedStatus: selectedStatus,
 //                       onSearchChanged: (value) {
@@ -529,37 +763,36 @@
 //                     ),
 //                     const SizedBox(height: 16),
 //                     if (state.isLoading && entries.isEmpty)
-//                       Padding(
-//                         padding: const EdgeInsets.all(34),
+//                       const Padding(
+//                         padding: EdgeInsets.all(34),
 //                         child: Center(
 //                           child: CircularProgressIndicator(
-//                             color: colors.primary,
+//                             color: AppColors.primary,
 //                           ),
 //                         ),
 //                       )
 //                     else if (widget.deviceId.trim().isEmpty)
-//                       _EmptyKhata(
-//                         colors: colors,
+//                       const _EmptyKhata(
 //                         title: "Device ID missing",
 //                         message: "Please select a device first.",
 //                       )
 //                     else if (deviceEntries.isEmpty)
 //                         _EmptyKhata(
-//                           colors: colors,
 //                           title: "No Khata entries for this device",
 //                           message:
 //                           "Entries for ${widget.deviceId} will appear after motor runs are billed.",
 //                         )
 //                       else if (entries.isEmpty)
-//                           _EmptyKhata(
-//                             colors: colors,
+//                           const _EmptyKhata(
 //                             title: "No matching entries",
 //                             message: "Try changing search text or payment filter.",
 //                           )
 //                         else
 //                           _KhataList(
 //                             entries: entries,
-//                             colors: colors,
+//                             hasFreshTelemetry: _hasFreshTelemetry,
+//                             motorConfirmedRunning: _motorConfirmedRunning,
+//                             confirmedMotorStopAt: _confirmedMotorStopAt,
 //                             onSetPrice: _showPriceSheet,
 //                             onPayment: _showPaymentSheet,
 //                             onEdit: _showEditSheet,
@@ -586,7 +819,9 @@
 //
 // class _KhataList extends StatelessWidget {
 //   final List<KhataEntryModel> entries;
-//   final _KhataColors colors;
+//   final bool hasFreshTelemetry;
+//   final bool motorConfirmedRunning;
+//   final DateTime? confirmedMotorStopAt;
 //   final ValueChanged<KhataEntryModel> onSetPrice;
 //   final ValueChanged<KhataEntryModel> onPayment;
 //   final ValueChanged<KhataEntryModel> onEdit;
@@ -596,7 +831,9 @@
 //
 //   const _KhataList({
 //     required this.entries,
-//     required this.colors,
+//     required this.hasFreshTelemetry,
+//     required this.motorConfirmedRunning,
+//     required this.confirmedMotorStopAt,
 //     required this.onSetPrice,
 //     required this.onPayment,
 //     required this.onEdit,
@@ -618,7 +855,9 @@
 //                 padding: const EdgeInsets.only(bottom: 14),
 //                 child: _KhataCard(
 //                   entry: entry,
-//                   colors: colors,
+//                   hasFreshTelemetry: hasFreshTelemetry,
+//                   motorConfirmedRunning: motorConfirmedRunning,
+//                   confirmedMotorStopAt: confirmedMotorStopAt,
 //                   onSetPrice: () => onSetPrice(entry),
 //                   onPayment: () => onPayment(entry),
 //                   onEdit: () => onEdit(entry),
@@ -639,7 +878,9 @@
 //               width: (constraints.maxWidth - 16) / 2,
 //               child: _KhataCard(
 //                 entry: entry,
-//                 colors: colors,
+//                 hasFreshTelemetry: hasFreshTelemetry,
+//                 motorConfirmedRunning: motorConfirmedRunning,
+//                 confirmedMotorStopAt: confirmedMotorStopAt,
 //                 onSetPrice: () => onSetPrice(entry),
 //                 onPayment: () => onPayment(entry),
 //                 onEdit: () => onEdit(entry),
@@ -656,12 +897,10 @@
 // }
 //
 // class _DeviceHeader extends StatelessWidget {
-//   final _KhataColors colors;
 //   final String deviceId;
 //   final int count;
 //
 //   const _DeviceHeader({
-//     required this.colors,
 //     required this.deviceId,
 //     required this.count,
 //   });
@@ -671,16 +910,16 @@
 //     return Container(
 //       padding: const EdgeInsets.all(18),
 //       decoration: BoxDecoration(
-//         gradient: LinearGradient(
+//         gradient: const LinearGradient(
 //           colors: [
-//             colors.primary,
-//             colors.primaryDark,
+//             AppColors.primaryDark,
+//             AppColors.mintAccentDark,
 //           ],
 //         ),
 //         borderRadius: BorderRadius.circular(28),
 //         boxShadow: [
 //           BoxShadow(
-//             color: colors.primary.withOpacity(0.24),
+//             color: AppColors.primary.withOpacity(0.18),
 //             blurRadius: 26,
 //             offset: const Offset(0, 14),
 //           ),
@@ -692,12 +931,12 @@
 //             width: 58,
 //             height: 58,
 //             decoration: BoxDecoration(
-//               color: Colors.white.withOpacity(0.16),
+//               color: AppColors.white.withOpacity(0.10),
 //               borderRadius: BorderRadius.circular(18),
 //             ),
 //             child: const Icon(
 //               Icons.receipt_long_rounded,
-//               color: Colors.white,
+//               color: AppColors.primary,
 //               size: 30,
 //             ),
 //           ),
@@ -709,7 +948,7 @@
 //                 const Text(
 //                   "Device Khata Ledger",
 //                   style: TextStyle(
-//                     color: Colors.white,
+//                     color: AppColors.white,
 //                     fontSize: 18,
 //                     fontWeight: FontWeight.w900,
 //                   ),
@@ -720,7 +959,7 @@
 //                   maxLines: 1,
 //                   overflow: TextOverflow.ellipsis,
 //                   style: const TextStyle(
-//                     color: Color(0xFFE0F2FE),
+//                     color: AppColors.gray300,
 //                     fontSize: 13,
 //                     fontWeight: FontWeight.w700,
 //                   ),
@@ -730,21 +969,18 @@
 //           ),
 //           const SizedBox(width: 10),
 //           Container(
-//             padding: const EdgeInsets.symmetric(
-//               horizontal: 12,
-//               vertical: 9,
-//             ),
+//             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
 //             decoration: BoxDecoration(
-//               color: Colors.white.withOpacity(0.16),
+//               color: AppColors.white.withOpacity(0.10),
 //               borderRadius: BorderRadius.circular(16),
 //               border: Border.all(
-//                 color: Colors.white.withOpacity(0.12),
+//                 color: AppColors.white.withOpacity(0.12),
 //               ),
 //             ),
 //             child: Text(
 //               "$count entries",
 //               style: const TextStyle(
-//                 color: Colors.white,
+//                 color: AppColors.white,
 //                 fontWeight: FontWeight.w900,
 //               ),
 //             ),
@@ -756,14 +992,12 @@
 // }
 //
 // class _SearchAndFilters extends StatelessWidget {
-//   final _KhataColors colors;
 //   final TextEditingController searchController;
 //   final String selectedStatus;
 //   final ValueChanged<String> onSearchChanged;
 //   final ValueChanged<String> onStatusChanged;
 //
 //   const _SearchAndFilters({
-//     required this.colors,
 //     required this.searchController,
 //     required this.selectedStatus,
 //     required this.onSearchChanged,
@@ -774,42 +1008,37 @@
 //   Widget build(BuildContext context) {
 //     return Container(
 //       padding: const EdgeInsets.all(14),
-//       decoration: BoxDecoration(
-//         color: colors.card,
-//         borderRadius: BorderRadius.circular(24),
-//         border: Border.all(color: colors.border),
-//         boxShadow: colors.cardShadow,
-//       ),
+//       decoration: AppThemeColors.cardDecoration(context),
 //       child: Column(
 //         children: [
 //           TextField(
 //             controller: searchController,
 //             onChanged: onSearchChanged,
 //             style: TextStyle(
-//               color: colors.text,
+//               color: AppThemeColors.text(context),
 //               fontWeight: FontWeight.w700,
 //             ),
 //             decoration: InputDecoration(
 //               hintText: "Search customer, date, device, or status",
-//               hintStyle: TextStyle(color: colors.secondaryText),
-//               prefixIcon: Icon(
+//               hintStyle: TextStyle(color: AppThemeColors.subText(context)),
+//               prefixIcon: const Icon(
 //                 Icons.search_rounded,
-//                 color: colors.primary,
+//                 color: AppColors.primary,
 //               ),
 //               filled: true,
-//               fillColor: colors.inputFill,
+//               fillColor: AppThemeColors.input(context),
 //               border: OutlineInputBorder(
 //                 borderRadius: BorderRadius.circular(18),
-//                 borderSide: BorderSide(color: colors.border),
+//                 borderSide: BorderSide(color: AppThemeColors.border(context)),
 //               ),
 //               enabledBorder: OutlineInputBorder(
 //                 borderRadius: BorderRadius.circular(18),
-//                 borderSide: BorderSide(color: colors.border),
+//                 borderSide: BorderSide(color: AppThemeColors.border(context)),
 //               ),
 //               focusedBorder: OutlineInputBorder(
 //                 borderRadius: BorderRadius.circular(18),
-//                 borderSide: BorderSide(
-//                   color: colors.primary,
+//                 borderSide: const BorderSide(
+//                   color: AppColors.primary,
 //                   width: 1.4,
 //                 ),
 //               ),
@@ -825,28 +1054,24 @@
 //                 _StatusChip(
 //                   label: "All",
 //                   value: "all",
-//                   colors: colors,
 //                   selectedStatus: selectedStatus,
 //                   onChanged: onStatusChanged,
 //                 ),
 //                 _StatusChip(
 //                   label: "Unpaid",
 //                   value: "unpaid",
-//                   colors: colors,
 //                   selectedStatus: selectedStatus,
 //                   onChanged: onStatusChanged,
 //                 ),
 //                 _StatusChip(
 //                   label: "Partial",
 //                   value: "partial",
-//                   colors: colors,
 //                   selectedStatus: selectedStatus,
 //                   onChanged: onStatusChanged,
 //                 ),
 //                 _StatusChip(
 //                   label: "Paid",
 //                   value: "paid",
-//                   colors: colors,
 //                   selectedStatus: selectedStatus,
 //                   onChanged: onStatusChanged,
 //                 ),
@@ -862,14 +1087,12 @@
 // class _StatusChip extends StatelessWidget {
 //   final String label;
 //   final String value;
-//   final _KhataColors colors;
 //   final String selectedStatus;
 //   final ValueChanged<String> onChanged;
 //
 //   const _StatusChip({
 //     required this.label,
 //     required this.value,
-//     required this.colors,
 //     required this.selectedStatus,
 //     required this.onChanged,
 //   });
@@ -877,19 +1100,19 @@
 //   @override
 //   Widget build(BuildContext context) {
 //     final selected = selectedStatus == value;
-//     final selectedColor = _statusColor(value, colors);
+//     final selectedColor = _statusColor(value);
 //
 //     return ChoiceChip(
 //       selected: selected,
 //       label: Text(label),
 //       onSelected: (_) => onChanged(value),
 //       selectedColor: selectedColor,
-//       backgroundColor: colors.inputFill,
+//       backgroundColor: AppThemeColors.input(context),
 //       side: BorderSide(
-//         color: selected ? selectedColor : colors.border,
+//         color: selected ? selectedColor : AppThemeColors.border(context),
 //       ),
 //       labelStyle: TextStyle(
-//         color: selected ? Colors.white : colors.text,
+//         color: selected ? AppColors.white : AppThemeColors.text(context),
 //         fontWeight: FontWeight.w800,
 //       ),
 //       shape: RoundedRectangleBorder(
@@ -904,14 +1127,12 @@
 //   final double totalReceived;
 //   final double totalRemaining;
 //   final int count;
-//   final _KhataColors colors;
 //
 //   const _SummaryGrid({
 //     required this.totalBill,
 //     required this.totalReceived,
 //     required this.totalRemaining,
 //     required this.count,
-//     required this.colors,
 //   });
 //
 //   @override
@@ -932,29 +1153,25 @@
 //               label: "Entries",
 //               value: "$count",
 //               icon: Icons.receipt_long_rounded,
-//               accent: colors.primary,
-//               colors: colors,
+//               accent: AppColors.primary,
 //             ),
 //             _SummaryCard(
 //               label: "Total Bill",
 //               value: _money(totalBill),
 //               icon: Icons.account_balance_wallet_rounded,
-//               accent: const Color(0xFF2563EB),
-//               colors: colors,
+//               accent: AppColors.info,
 //             ),
 //             _SummaryCard(
 //               label: "Received",
 //               value: _money(totalReceived),
 //               icon: Icons.payments_rounded,
-//               accent: colors.success,
-//               colors: colors,
+//               accent: AppColors.success,
 //             ),
 //             _SummaryCard(
 //               label: "Remaining",
 //               value: _money(totalRemaining),
 //               icon: Icons.warning_amber_rounded,
-//               accent: totalRemaining > 0 ? colors.danger : colors.success,
-//               colors: colors,
+//               accent: totalRemaining > 0 ? AppColors.error : AppColors.success,
 //             ),
 //           ],
 //         );
@@ -968,26 +1185,19 @@
 //   final String value;
 //   final IconData icon;
 //   final Color accent;
-//   final _KhataColors colors;
 //
 //   const _SummaryCard({
 //     required this.label,
 //     required this.value,
 //     required this.icon,
 //     required this.accent,
-//     required this.colors,
 //   });
 //
 //   @override
 //   Widget build(BuildContext context) {
 //     return Container(
 //       padding: const EdgeInsets.all(14),
-//       decoration: BoxDecoration(
-//         color: colors.card,
-//         borderRadius: BorderRadius.circular(22),
-//         border: Border.all(color: colors.border),
-//         boxShadow: colors.cardShadow,
-//       ),
+//       decoration: AppThemeColors.cardDecoration(context),
 //       child: Column(
 //         crossAxisAlignment: CrossAxisAlignment.start,
 //         children: [
@@ -995,7 +1205,7 @@
 //             height: 38,
 //             width: 38,
 //             decoration: BoxDecoration(
-//               color: accent.withOpacity(0.12),
+//               color: accent.withOpacity(0.16),
 //               borderRadius: BorderRadius.circular(13),
 //             ),
 //             child: Icon(
@@ -1010,7 +1220,7 @@
 //             maxLines: 1,
 //             overflow: TextOverflow.ellipsis,
 //             style: TextStyle(
-//               color: colors.secondaryText,
+//               color: AppThemeColors.subText(context),
 //               fontWeight: FontWeight.w700,
 //               fontSize: 12.5,
 //             ),
@@ -1020,7 +1230,7 @@
 //             child: Text(
 //               value,
 //               style: TextStyle(
-//                 color: colors.text,
+//                 color: AppThemeColors.text(context),
 //                 fontWeight: FontWeight.w900,
 //                 fontSize: 20,
 //               ),
@@ -1034,7 +1244,9 @@
 //
 // class _KhataCard extends StatelessWidget {
 //   final KhataEntryModel entry;
-//   final _KhataColors colors;
+//   final bool hasFreshTelemetry;
+//   final bool motorConfirmedRunning;
+//   final DateTime? confirmedMotorStopAt;
 //   final VoidCallback onSetPrice;
 //   final VoidCallback onPayment;
 //   final VoidCallback onEdit;
@@ -1044,7 +1256,9 @@
 //
 //   const _KhataCard({
 //     required this.entry,
-//     required this.colors,
+//     required this.hasFreshTelemetry,
+//     required this.motorConfirmedRunning,
+//     required this.confirmedMotorStopAt,
 //     required this.onSetPrice,
 //     required this.onPayment,
 //     required this.onEdit,
@@ -1055,17 +1269,23 @@
 //
 //   @override
 //   Widget build(BuildContext context) {
-//     final statusColor = _statusColor(entry.paymentStatus, colors);
+//     final statusColor = _statusColor(entry.paymentStatus);
 //     final canAddPayment = entry.totalBill > 0 && entry.remainingBalance > 0;
+//
+//     final sessionActuallyRunning =
+//         entry.isOpen &&
+//             entry.endTime == null &&
+//             (!hasFreshTelemetry || motorConfirmedRunning);
+//
+//     final motorConfirmedOffWhileEntryOpen =
+//         entry.isOpen &&
+//             entry.endTime == null &&
+//             hasFreshTelemetry &&
+//             !motorConfirmedRunning;
 //
 //     return Container(
 //       padding: const EdgeInsets.all(16),
-//       decoration: BoxDecoration(
-//         color: colors.card,
-//         borderRadius: BorderRadius.circular(24),
-//         border: Border.all(color: colors.border),
-//         boxShadow: colors.cardShadow,
-//       ),
+//       decoration: AppThemeColors.cardDecoration(context),
 //       child: Column(
 //         crossAxisAlignment: CrossAxisAlignment.start,
 //         children: [
@@ -1073,10 +1293,10 @@
 //             children: [
 //               CircleAvatar(
 //                 radius: 22,
-//                 backgroundColor: colors.primary.withOpacity(0.12),
-//                 child: Icon(
+//                 backgroundColor: AppColors.primary.withOpacity(0.14),
+//                 child: const Icon(
 //                   Icons.person_rounded,
-//                   color: colors.primary,
+//                   color: AppColors.primary,
 //                 ),
 //               ),
 //               const SizedBox(width: 12),
@@ -1086,15 +1306,15 @@
 //                   maxLines: 1,
 //                   overflow: TextOverflow.ellipsis,
 //                   style: TextStyle(
-//                     color: colors.text,
+//                     color: AppThemeColors.text(context),
 //                     fontSize: 17,
 //                     fontWeight: FontWeight.w900,
 //                   ),
 //                 ),
 //               ),
 //               PopupMenuButton<String>(
-//                 color: colors.card,
-//                 iconColor: colors.secondaryText,
+//                 color: AppThemeColors.card(context),
+//                 iconColor: AppThemeColors.subText(context),
 //                 onSelected: (value) {
 //                   if (value == "edit") onEdit();
 //                   if (value == "delete") onDelete();
@@ -1107,29 +1327,29 @@
 //                       value: "edit",
 //                       child: Text(
 //                         "Update",
-//                         style: TextStyle(color: colors.text),
+//                         style: TextStyle(color: AppThemeColors.text(context)),
 //                       ),
 //                     ),
 //                     PopupMenuItem(
 //                       value: "preview",
 //                       child: Text(
 //                         "Preview PDF",
-//                         style: TextStyle(color: colors.text),
+//                         style: TextStyle(color: AppThemeColors.text(context)),
 //                       ),
 //                     ),
 //                     PopupMenuItem(
 //                       value: "share",
 //                       child: Text(
 //                         "Share PDF",
-//                         style: TextStyle(color: colors.text),
+//                         style: TextStyle(color: AppThemeColors.text(context)),
 //                       ),
 //                     ),
 //                     const PopupMenuDivider(),
-//                     PopupMenuItem(
+//                     const PopupMenuItem(
 //                       value: "delete",
 //                       child: Text(
 //                         "Delete",
-//                         style: TextStyle(color: colors.danger),
+//                         style: TextStyle(color: AppColors.error),
 //                       ),
 //                     ),
 //                   ];
@@ -1143,6 +1363,16 @@
 //             runSpacing: 8,
 //             crossAxisAlignment: WrapCrossAlignment.center,
 //             children: [
+//               if (sessionActuallyRunning)
+//                 const _StatusBadge(
+//                   label: "RUNNING",
+//                   color: AppColors.success,
+//                 ),
+//               if (motorConfirmedOffWhileEntryOpen)
+//                 const _StatusBadge(
+//                   label: "STOPPED",
+//                   color: AppColors.error,
+//                 ),
 //               _StatusBadge(
 //                 label: entry.paymentStatus.toUpperCase(),
 //                 color: statusColor,
@@ -1150,40 +1380,64 @@
 //               _SoftBadge(
 //                 icon: Icons.calendar_today_rounded,
 //                 label: entry.date.isEmpty ? "-" : entry.date,
-//                 colors: colors,
 //               ),
 //             ],
 //           ),
 //           const SizedBox(height: 16),
-//           _InfoRow(label: "Device", value: entry.deviceId, colors: colors),
+//           _InfoRow(label: "Device", value: entry.deviceId),
 //           _InfoRow(
-//             label: "Run Hours",
-//             value: entry.runHours.toStringAsFixed(2),
-//             colors: colors,
+//             label: sessionActuallyRunning
+//                 ? "Running Time"
+//                 : motorConfirmedOffWhileEntryOpen
+//                 ? "Stopped Time"
+//                 : "Run Hours",
+//             value: (entry.isOpen || entry.endTime != null)
+//                 ? _displayRunTime(
+//               entry,
+//               hasFreshTelemetry: hasFreshTelemetry,
+//               motorConfirmedRunning: motorConfirmedRunning,
+//               confirmedMotorStopAt: confirmedMotorStopAt,
+//             )
+//                 : "${entry.runHours.toStringAsFixed(2)} hr",
+//             strong:
+//             sessionActuallyRunning || motorConfirmedOffWhileEntryOpen,
+//             strongColor: sessionActuallyRunning
+//                 ? AppColors.success
+//                 : motorConfirmedOffWhileEntryOpen
+//                 ? AppColors.error
+//                 : null,
 //           ),
 //           _InfoRow(
 //             label: "Price Per Hour",
 //             value: _money(entry.pricePerHour),
-//             colors: colors,
 //           ),
 //           _InfoRow(
 //             label: "Total Bill",
 //             value: _money(entry.totalBill),
-//             colors: colors,
 //           ),
 //           _InfoRow(
 //             label: "Cash Received",
 //             value: _money(entry.cashReceived),
-//             colors: colors,
 //           ),
 //           _InfoRow(
 //             label: "Remaining",
 //             value: _money(entry.remainingBalance),
-//             colors: colors,
 //             strong: true,
 //             strongColor:
-//             entry.remainingBalance > 0 ? colors.danger : colors.success,
+//             entry.remainingBalance > 0
+//                 ? AppColors.error
+//                 : AppColors.success,
 //           ),
+//
+//           // Show overpayment as customer credit/advance.
+//           if (entry.advanceAmount > 0)
+//             _InfoRow(
+//               label: "Advance / Credit",
+//               value: _money(entry.advanceAmount),
+//               strong: true,
+//               strongColor: AppColors.success,
+//             ),
+//
 //           const SizedBox(height: 14),
 //           Column(
 //             children: [
@@ -1193,7 +1447,8 @@
 //                     child: _ActionButton(
 //                       label: entry.pricePerHour <= 0 ? "Set Rate" : "Rate",
 //                       icon: Icons.calculate_rounded,
-//                       color: colors.primary,
+//                       color: AppColors.primary,
+//                       textColor: AppColors.black,
 //                       filled: true,
 //                       onTap: onSetPrice,
 //                     ),
@@ -1201,9 +1456,10 @@
 //                   const SizedBox(width: 8),
 //                   Expanded(
 //                     child: _ActionButton(
-//                       label: "Payment",
+//                       label: "Add Payment",
 //                       icon: Icons.add_card_rounded,
-//                       color: colors.success,
+//                       color: AppColors.green,
+//                       textColor: AppColors.white,
 //                       filled: true,
 //                       onTap: canAddPayment ? onPayment : null,
 //                     ),
@@ -1217,7 +1473,8 @@
 //                     child: _ActionButton(
 //                       label: "Update",
 //                       icon: Icons.edit_rounded,
-//                       color: colors.primary,
+//                       color: AppColors.primary,
+//                       textColor: AppColors.primary,
 //                       filled: false,
 //                       onTap: onEdit,
 //                     ),
@@ -1227,7 +1484,8 @@
 //                     child: _ActionButton(
 //                       label: "Delete",
 //                       icon: Icons.delete_outline_rounded,
-//                       color: colors.danger,
+//                       color: AppColors.error,
+//                       textColor: AppColors.error,
 //                       filled: false,
 //                       onTap: onDelete,
 //                     ),
@@ -1254,14 +1512,11 @@
 //   @override
 //   Widget build(BuildContext context) {
 //     return Container(
-//       padding: const EdgeInsets.symmetric(
-//         horizontal: 10,
-//         vertical: 7,
-//       ),
+//       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
 //       decoration: BoxDecoration(
-//         color: color.withOpacity(0.12),
+//         color: color.withOpacity(0.18),
 //         borderRadius: BorderRadius.circular(999),
-//         border: Border.all(color: color.withOpacity(0.18)),
+//         border: Border.all(color: color.withOpacity(0.22)),
 //       ),
 //       child: Text(
 //         label,
@@ -1278,35 +1533,30 @@
 // class _SoftBadge extends StatelessWidget {
 //   final IconData icon;
 //   final String label;
-//   final _KhataColors colors;
 //
 //   const _SoftBadge({
 //     required this.icon,
 //     required this.label,
-//     required this.colors,
 //   });
 //
 //   @override
 //   Widget build(BuildContext context) {
 //     return Container(
-//       padding: const EdgeInsets.symmetric(
-//         horizontal: 10,
-//         vertical: 7,
-//       ),
+//       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
 //       decoration: BoxDecoration(
-//         color: colors.inputFill,
+//         color: AppThemeColors.input(context),
 //         borderRadius: BorderRadius.circular(999),
-//         border: Border.all(color: colors.border),
+//         border: Border.all(color: AppThemeColors.border(context)),
 //       ),
 //       child: Row(
 //         mainAxisSize: MainAxisSize.min,
 //         children: [
-//           Icon(icon, size: 13, color: colors.secondaryText),
+//           Icon(icon, size: 13, color: AppThemeColors.subText(context)),
 //           const SizedBox(width: 5),
 //           Text(
 //             label,
 //             style: TextStyle(
-//               color: colors.secondaryText,
+//               color: AppThemeColors.subText(context),
 //               fontSize: 11,
 //               fontWeight: FontWeight.w800,
 //             ),
@@ -1321,6 +1571,7 @@
 //   final String label;
 //   final IconData icon;
 //   final Color color;
+//   final Color textColor;
 //   final bool filled;
 //   final VoidCallback? onTap;
 //
@@ -1328,6 +1579,7 @@
 //     required this.label,
 //     required this.icon,
 //     required this.color,
+//     required this.textColor,
 //     required this.filled,
 //     required this.onTap,
 //   });
@@ -1337,18 +1589,19 @@
 //     final enabled = onTap != null;
 //
 //     return SizedBox(
-//       height: 42,
+//       height: 44,
 //       child: filled
 //           ? ElevatedButton.icon(
 //         onPressed: onTap,
 //         icon: Icon(icon, size: 17),
-//         label: Text(label),
+//         label: FittedBox(child: Text(label)),
 //         style: ElevatedButton.styleFrom(
-//           backgroundColor: enabled ? color : color.withOpacity(0.30),
-//           foregroundColor: Colors.white,
-//           disabledBackgroundColor: color.withOpacity(0.22),
-//           disabledForegroundColor: Colors.white60,
-//           elevation: 0,
+//           backgroundColor: enabled ? color : AppColors.disabledDark,
+//           foregroundColor: enabled ? textColor : AppColors.gray500,
+//           disabledBackgroundColor: AppColors.disabledDark,
+//           disabledForegroundColor: AppColors.gray500,
+//           elevation: enabled ? 4 : 0,
+//           shadowColor: color.withOpacity(0.25),
 //           shape: RoundedRectangleBorder(
 //             borderRadius: BorderRadius.circular(14),
 //           ),
@@ -1357,11 +1610,11 @@
 //           : OutlinedButton.icon(
 //         onPressed: onTap,
 //         icon: Icon(icon, size: 17),
-//         label: Text(label),
+//         label: FittedBox(child: Text(label)),
 //         style: OutlinedButton.styleFrom(
-//           foregroundColor: enabled ? color : Colors.grey,
+//           foregroundColor: enabled ? textColor : AppColors.gray500,
 //           side: BorderSide(
-//             color: enabled ? color.withOpacity(0.45) : Colors.grey,
+//             color: enabled ? color.withOpacity(0.55) : AppColors.gray600,
 //           ),
 //           shape: RoundedRectangleBorder(
 //             borderRadius: BorderRadius.circular(14),
@@ -1375,14 +1628,12 @@
 // class _InfoRow extends StatelessWidget {
 //   final String label;
 //   final String value;
-//   final _KhataColors colors;
 //   final bool strong;
 //   final Color? strongColor;
 //
 //   const _InfoRow({
 //     required this.label,
 //     required this.value,
-//     required this.colors,
 //     this.strong = false,
 //     this.strongColor,
 //   });
@@ -1398,7 +1649,7 @@
 //             child: Text(
 //               label,
 //               style: TextStyle(
-//                 color: colors.secondaryText,
+//                 color: AppThemeColors.subText(context),
 //                 fontWeight: FontWeight.w600,
 //               ),
 //             ),
@@ -1410,7 +1661,9 @@
 //               textAlign: TextAlign.right,
 //               overflow: TextOverflow.ellipsis,
 //               style: TextStyle(
-//                 color: strong ? (strongColor ?? colors.primary) : colors.text,
+//                 color: strong
+//                     ? (strongColor ?? AppColors.primary)
+//                     : AppThemeColors.text(context),
 //                 fontWeight: strong ? FontWeight.w900 : FontWeight.w800,
 //               ),
 //             ),
@@ -1423,14 +1676,12 @@
 //
 // class _KhataBottomSheet extends StatelessWidget {
 //   final double bottom;
-//   final _KhataColors colors;
 //   final String title;
 //   final String subtitle;
 //   final List<Widget> children;
 //
 //   const _KhataBottomSheet({
 //     required this.bottom,
-//     required this.colors,
 //     required this.title,
 //     required this.subtitle,
 //     required this.children,
@@ -1440,9 +1691,12 @@
 //   Widget build(BuildContext context) {
 //     return Container(
 //       decoration: BoxDecoration(
-//         color: colors.card,
+//         color: AppThemeColors.card(context),
 //         borderRadius: const BorderRadius.vertical(
 //           top: Radius.circular(28),
+//         ),
+//         border: Border(
+//           top: BorderSide(color: AppThemeColors.border(context)),
 //         ),
 //       ),
 //       padding: EdgeInsets.fromLTRB(20, 18, 20, bottom + 20),
@@ -1454,7 +1708,7 @@
 //               width: 48,
 //               height: 5,
 //               decoration: BoxDecoration(
-//                 color: colors.border,
+//                 color: AppThemeColors.border(context),
 //                 borderRadius: BorderRadius.circular(99),
 //               ),
 //             ),
@@ -1463,7 +1717,7 @@
 //               title,
 //               textAlign: TextAlign.center,
 //               style: TextStyle(
-//                 color: colors.text,
+//                 color: AppThemeColors.text(context),
 //                 fontSize: 20,
 //                 fontWeight: FontWeight.w900,
 //               ),
@@ -1473,7 +1727,7 @@
 //               subtitle,
 //               textAlign: TextAlign.center,
 //               style: TextStyle(
-//                 color: colors.secondaryText,
+//                 color: AppThemeColors.subText(context),
 //                 fontWeight: FontWeight.w600,
 //               ),
 //             ),
@@ -1491,13 +1745,11 @@
 //   final String label;
 //   final IconData icon;
 //   final TextInputType keyboardType;
-//   final _KhataColors colors;
 //
 //   const _SheetField({
 //     required this.controller,
 //     required this.label,
 //     required this.icon,
-//     required this.colors,
 //     this.keyboardType = TextInputType.text,
 //   });
 //
@@ -1507,27 +1759,27 @@
 //       controller: controller,
 //       keyboardType: keyboardType,
 //       style: TextStyle(
-//         color: colors.text,
+//         color: AppThemeColors.text(context),
 //         fontWeight: FontWeight.w700,
 //       ),
 //       decoration: InputDecoration(
 //         labelText: label,
-//         labelStyle: TextStyle(color: colors.secondaryText),
-//         prefixIcon: Icon(icon, color: colors.primary),
+//         labelStyle: TextStyle(color: AppThemeColors.subText(context)),
+//         prefixIcon: Icon(icon, color: AppColors.primary),
 //         filled: true,
-//         fillColor: colors.inputFill,
+//         fillColor: AppThemeColors.input(context),
 //         border: OutlineInputBorder(
 //           borderRadius: BorderRadius.circular(16),
-//           borderSide: BorderSide(color: colors.border),
+//           borderSide: BorderSide(color: AppThemeColors.border(context)),
 //         ),
 //         enabledBorder: OutlineInputBorder(
 //           borderRadius: BorderRadius.circular(16),
-//           borderSide: BorderSide(color: colors.border),
+//           borderSide: BorderSide(color: AppThemeColors.border(context)),
 //         ),
-//         focusedBorder: OutlineInputBorder(
-//           borderRadius: BorderRadius.circular(16),
+//         focusedBorder: const OutlineInputBorder(
+//           borderRadius: BorderRadius.all(Radius.circular(16)),
 //           borderSide: BorderSide(
-//             color: colors.primary,
+//             color: AppColors.primary,
 //             width: 1.4,
 //           ),
 //         ),
@@ -1540,17 +1792,22 @@
 //   final IconData icon;
 //   final String label;
 //   final VoidCallback onPressed;
-//   final _KhataColors colors;
+//   final Color? color;
+//   final Color? foregroundColor;
 //
 //   const _PrimarySheetButton({
 //     required this.icon,
 //     required this.label,
 //     required this.onPressed,
-//     required this.colors,
+//     this.color,
+//     this.foregroundColor,
 //   });
 //
 //   @override
 //   Widget build(BuildContext context) {
+//     final bg = color ?? AppColors.primary;
+//     final fg = foregroundColor ?? AppColors.black;
+//
 //     return SizedBox(
 //       width: double.infinity,
 //       height: 54,
@@ -1562,9 +1819,10 @@
 //           style: const TextStyle(fontWeight: FontWeight.w900),
 //         ),
 //         style: ElevatedButton.styleFrom(
-//           backgroundColor: colors.primary,
-//           foregroundColor: Colors.white,
-//           elevation: 0,
+//           backgroundColor: bg,
+//           foregroundColor: fg,
+//           elevation: 4,
+//           shadowColor: bg.withOpacity(0.28),
 //           shape: RoundedRectangleBorder(
 //             borderRadius: BorderRadius.circular(16),
 //           ),
@@ -1575,12 +1833,10 @@
 // }
 //
 // class _EmptyKhata extends StatelessWidget {
-//   final _KhataColors colors;
 //   final String title;
 //   final String message;
 //
 //   const _EmptyKhata({
-//     required this.colors,
 //     required this.title,
 //     required this.message,
 //   });
@@ -1590,24 +1846,19 @@
 //     return Container(
 //       width: double.infinity,
 //       padding: const EdgeInsets.all(30),
-//       decoration: BoxDecoration(
-//         color: colors.card,
-//         borderRadius: BorderRadius.circular(24),
-//         border: Border.all(color: colors.border),
-//         boxShadow: colors.cardShadow,
-//       ),
+//       decoration: AppThemeColors.cardDecoration(context),
 //       child: Column(
 //         children: [
 //           Container(
 //             height: 58,
 //             width: 58,
 //             decoration: BoxDecoration(
-//               color: colors.primary.withOpacity(0.12),
+//               color: AppColors.primary.withOpacity(0.14),
 //               borderRadius: BorderRadius.circular(18),
 //             ),
-//             child: Icon(
+//             child: const Icon(
 //               Icons.receipt_long_rounded,
-//               color: colors.primary,
+//               color: AppColors.primary,
 //               size: 34,
 //             ),
 //           ),
@@ -1616,7 +1867,7 @@
 //             title,
 //             textAlign: TextAlign.center,
 //             style: TextStyle(
-//               color: colors.text,
+//               color: AppThemeColors.text(context),
 //               fontWeight: FontWeight.w900,
 //               fontSize: 18,
 //             ),
@@ -1626,7 +1877,7 @@
 //             message,
 //             textAlign: TextAlign.center,
 //             style: TextStyle(
-//               color: colors.secondaryText,
+//               color: AppThemeColors.subText(context),
 //               height: 1.35,
 //               fontWeight: FontWeight.w600,
 //             ),
@@ -1647,98 +1898,16 @@
 //   });
 // }
 //
-// class _KhataColors {
-//   final Color background;
-//   final Color appBar;
-//   final Color card;
-//   final Color inputFill;
-//   final Color text;
-//   final Color secondaryText;
-//   final Color border;
-//   final Color primary;
-//   final Color primaryDark;
-//   final Color success;
-//   final Color warning;
-//   final Color danger;
-//   final List<BoxShadow> cardShadow;
-//
-//   const _KhataColors({
-//     required this.background,
-//     required this.appBar,
-//     required this.card,
-//     required this.inputFill,
-//     required this.text,
-//     required this.secondaryText,
-//     required this.border,
-//     required this.primary,
-//     required this.primaryDark,
-//     required this.success,
-//     required this.warning,
-//     required this.danger,
-//     required this.cardShadow,
-//   });
-//
-//   factory _KhataColors.of(BuildContext context) {
-//     final dark = Theme.of(context).brightness == Brightness.dark;
-//
-//     if (dark) {
-//       return _KhataColors(
-//         background: const Color(0xFF08111F),
-//         appBar: const Color(0xFF0E7490),
-//         card: const Color(0xFF101827),
-//         inputFill: const Color(0xFF0B1220),
-//         text: const Color(0xFFF8FAFC),
-//         secondaryText: const Color(0xFF94A3B8),
-//         border: Colors.white.withOpacity(0.08),
-//         primary: const Color(0xFF22D3EE),
-//         primaryDark: const Color(0xFF0E7490),
-//         success: const Color(0xFF22C55E),
-//         warning: const Color(0xFFF59E0B),
-//         danger: const Color(0xFFEF4444),
-//         cardShadow: [
-//           BoxShadow(
-//             color: Colors.black.withOpacity(0.24),
-//             blurRadius: 20,
-//             offset: const Offset(0, 12),
-//           ),
-//         ],
-//       );
-//     }
-//
-//     return _KhataColors(
-//       background: const Color(0xFFF3F8FB),
-//       appBar: const Color(0xFF0284C7),
-//       card: Colors.white,
-//       inputFill: const Color(0xFFF8FAFC),
-//       text: const Color(0xFF0F172A),
-//       secondaryText: const Color(0xFF64748B),
-//       border: const Color(0xFFE2E8F0),
-//       primary: const Color(0xFF0284C7),
-//       primaryDark: const Color(0xFF075985),
-//       success: const Color(0xFF16A34A),
-//       warning: const Color(0xFFD97706),
-//       danger: const Color(0xFFDC2626),
-//       cardShadow: [
-//         BoxShadow(
-//           color: Colors.black.withOpacity(0.06),
-//           blurRadius: 20,
-//           offset: const Offset(0, 10),
-//         ),
-//       ],
-//     );
-//   }
-// }
-//
-// Color _statusColor(String value, _KhataColors colors) {
+// Color _statusColor(String value) {
 //   switch (value.toLowerCase()) {
 //     case "paid":
-//       return colors.success;
+//       return AppColors.success;
 //     case "partial":
-//       return colors.warning;
+//       return AppColors.warning;
 //     case "all":
-//       return colors.primary;
+//       return AppColors.primary;
 //     default:
-//       return colors.danger;
+//       return AppColors.error;
 //   }
 // }
 //
@@ -1752,13 +1921,60 @@
 //   return "unpaid";
 // }
 //
+// String _displayRunTime(
+//     KhataEntryModel entry, {
+//       required bool hasFreshTelemetry,
+//       required bool motorConfirmedRunning,
+//       required DateTime? confirmedMotorStopAt,
+//     }) {
+//   final startTime = entry.startTime;
+//
+//   if (startTime == null) {
+//     final totalSeconds = (entry.runHours * 3600).round();
+//     return _formatDuration(totalSeconds < 0 ? 0 : totalSeconds);
+//   }
+//
+//   // Persisted backend endTime is always authoritative.
+//   if (entry.endTime != null) {
+//     final seconds = entry.endTime!.difference(startTime).inSeconds;
+//     return _formatDuration(seconds < 0 ? 0 : seconds);
+//   }
+//
+//   if (entry.isOpen) {
+//     // Fresh VFD OFF freezes the clock immediately, before isOpen changes.
+//     if (hasFreshTelemetry && !motorConfirmedRunning) {
+//       final stopAt = confirmedMotorStopAt ?? DateTime.now();
+//       final seconds = stopAt.difference(startTime).inSeconds;
+//       return _formatDuration(seconds < 0 ? 0 : seconds);
+//     }
+//
+//     final seconds = DateTime.now().difference(startTime).inSeconds;
+//     return _formatDuration(seconds < 0 ? 0 : seconds);
+//   }
+//
+//   final totalSeconds = (entry.runHours * 3600).round();
+//   return _formatDuration(totalSeconds < 0 ? 0 : totalSeconds);
+// }
+//
+// String _formatDuration(int totalSeconds) {
+//   final hours = totalSeconds ~/ 3600;
+//   final minutes = (totalSeconds % 3600) ~/ 60;
+//   final seconds = totalSeconds % 60;
+//
+//   return "${hours.toString().padLeft(2, "0")}:"
+//       "${minutes.toString().padLeft(2, "0")}:"
+//       "${seconds.toString().padLeft(2, "0")}";
+// }
+//
 // String _money(double value) {
 //   return value.toStringAsFixed(2);
 // }
+import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:smart_iot_app/src/core/constant/app_color.dart";
+import "package:smart_iot_app/src/features/telemetry/presentation/providers/telemetry_providers.dart";
 
 import "../../../../core/utils/app_theme_colours.dart";
 import "../../data/models/khata_entry_model.dart";
@@ -1767,18 +1983,14 @@ import "../state/khata_state.dart";
 
 // TODO: update this import path according to your project structure.
 
+import "dart:async";
 
-import "../../data/models/khata_entry_model.dart";
-import "../providers/ khata_providers.dart";
-import "../state/khata_state.dart";
+import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
 
 class KhataScreen extends ConsumerStatefulWidget {
   final String deviceId;
 
-  const KhataScreen({
-    super.key,
-    required this.deviceId,
-  });
+  const KhataScreen({super.key, required this.deviceId});
 
   @override
   ConsumerState<KhataScreen> createState() => _KhataScreenState();
@@ -1787,25 +1999,256 @@ class KhataScreen extends ConsumerStatefulWidget {
 class _KhataScreenState extends ConsumerState<KhataScreen> {
   final TextEditingController searchController = TextEditingController();
 
+  Timer? _runningTimer;
+  Timer? _telemetrySyncTimer;
+
+  // Only the live running-time text rebuilds every second.
+  final ValueNotifier<int> _clockTick = ValueNotifier<int>(0);
+
+  // Only the Khata list rebuilds when the real motor state changes.
+  final ValueNotifier<int> _motorUiTick = ValueNotifier<int>(0);
+
   String query = "";
   String selectedStatus = "all";
+
+  bool _initialLoadComplete = false;
+  bool _checkingTelemetry = false;
+  bool _hasFreshTelemetry = false;
+  bool _motorConfirmedRunning = false;
+  bool _offStateHandled = false;
+  bool _finalizingKhataFromTelemetry = false;
+  int _lastTelemetryTimestamp = 0;
+
+  // Freeze the visible Khata timer at the first fresh VFD OFF confirmation.
+  DateTime? _confirmedMotorStopAt;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
-      ref.read(khataViewModelProvider.notifier).loadEntries();
+
+    Future.microtask(() async {
+      try {
+        await ref.read(khataViewModelProvider.notifier).loadEntries();
+      } finally {
+        if (mounted) {
+          setState(() {
+            _initialLoadComplete = true;
+          });
+        } else {
+          _initialLoadComplete = true;
+        }
+      }
+
+      if (!mounted) return;
+
+      await _syncMotorStateAndKhata();
     });
+
+    // Update ONLY the live timer text once per second.
+    // The complete Khata screen is not rebuilt.
+    _runningTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+
+      final currentDeviceId = widget.deviceId.trim();
+
+      final hasOpenSession = ref
+          .read(khataViewModelProvider)
+          .entries
+          .any(
+            (entry) =>
+                entry.deviceId.trim() == currentDeviceId &&
+                entry.isOpen &&
+                entry.startTime != null &&
+                entry.endTime == null,
+          );
+
+      if (!hasOpenSession) return;
+
+      // Fresh VFD OFF freezes the live clock.
+      if (_hasFreshTelemetry && !_motorConfirmedRunning) {
+        return;
+      }
+
+      _clockTick.value++;
+    });
+
+    // Silent VFD polling. It does not show a loader and does not rebuild
+    // the whole page. Only a REAL motor state change updates the Khata list.
+    _telemetrySyncTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _syncMotorStateAndKhata(),
+    );
   }
 
   @override
   void dispose() {
+    _runningTimer?.cancel();
+    _telemetrySyncTimer?.cancel();
+    _clockTick.dispose();
+    _motorUiTick.dispose();
     searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _refresh() {
-    return ref.read(khataViewModelProvider.notifier).loadEntries();
+  int _toInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString()) ?? 0;
+  }
+
+  bool _isDeviceOnline(dynamic latest) {
+    if (latest == null) return false;
+
+    final live = _toInt(latest.isLive) == 1;
+    final fresh = latest.isFresh(withinSeconds: 20);
+
+    return live && fresh;
+  }
+
+  bool _isMotorRunning(dynamic latest) {
+    if (!_isDeviceOnline(latest)) return false;
+
+    final statusCode = _toInt(latest.statusCode);
+
+    return statusCode == 1 || statusCode == 2;
+  }
+
+  KhataEntryModel? _latestOpenKhataForCurrentDevice() {
+    final currentDeviceId = widget.deviceId.trim();
+
+    if (currentDeviceId.isEmpty) return null;
+
+    final entries = ref.read(khataViewModelProvider).entries;
+
+    KhataEntryModel? latestOpen;
+
+    for (final entry in entries) {
+      if (entry.deviceId.trim() != currentDeviceId) continue;
+      if (!entry.isOpen) continue;
+      if (entry.startTime == null) continue;
+      if (entry.endTime != null) continue;
+
+      if (latestOpen == null ||
+          entry.startTime!.isAfter(latestOpen.startTime!)) {
+        latestOpen = entry;
+      }
+    }
+
+    return latestOpen;
+  }
+
+  Future<void> _syncMotorStateAndKhata() async {
+    if (_checkingTelemetry) return;
+
+    final currentDeviceId = widget.deviceId.trim();
+
+    if (currentDeviceId.isEmpty) return;
+
+    _checkingTelemetry = true;
+
+    try {
+      await ref
+          .read(telemetryViewModelProvider.notifier)
+          .loadLatest(currentDeviceId, showLoading: false);
+
+      if (!mounted) return;
+
+      final latest = ref.read(telemetryViewModelProvider).latest;
+
+      // Stale/missing telemetry is ignored.
+      // It must NOT cause a fake OFF state or a screen rebuild.
+      if (!_isDeviceOnline(latest)) {
+        return;
+      }
+
+      final telemetryTimestamp = _toInt(latest?.timestamp);
+
+      // Ignore the same telemetry record.
+      if (telemetryTimestamp > 0 &&
+          telemetryTimestamp <= _lastTelemetryTimestamp) {
+        return;
+      }
+
+      if (telemetryTimestamp > 0) {
+        _lastTelemetryTimestamp = telemetryTimestamp;
+      }
+
+      final motorRunning = _isMotorRunning(latest);
+
+      final stateChanged =
+          !_hasFreshTelemetry || _motorConfirmedRunning != motorRunning;
+
+      // New telemetry with the SAME motor state causes no UI refresh.
+      if (!stateChanged) {
+        return;
+      }
+
+      _hasFreshTelemetry = true;
+      _motorConfirmedRunning = motorRunning;
+
+      if (motorRunning) {
+        _confirmedMotorStopAt = null;
+        _offStateHandled = false;
+      } else {
+        // Do not create a local/phone OFF timestamp here.
+        // HomeScreen / backend will close the MotorLog/Khata using the
+        // authoritative server/database endTime.
+        _confirmedMotorStopAt = null;
+      }
+
+      // Rebuild ONLY the Khata list, not the full screen.
+      _motorUiTick.value++;
+
+      if (!motorRunning && !_offStateHandled) {
+        _offStateHandled = true;
+        await _handleConfirmedMotorOff();
+      }
+    } catch (_) {
+      // Connectivity problems are ignored.
+      // Never turn a network error into a fake motor OFF.
+    } finally {
+      _checkingTelemetry = false;
+    }
+  }
+
+  Future<void> _handleConfirmedMotorOff() async {
+    if (!mounted || _finalizingKhataFromTelemetry) return;
+
+    _finalizingKhataFromTelemetry = true;
+
+    try {
+      // IMPORTANT:
+      // Do not close Khata here with DateTime.now().
+      //
+      // The ON/OFF button flow in HomeScreen is responsible for:
+      //   ON  -> server/database startTime
+      //   OFF -> server/database endTime
+      //
+      // KhataScreen only reloads that authoritative saved record.
+      // This keeps HomeScreen, Motor Logs and Khata on the same time source.
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+
+      if (!mounted) return;
+
+      await ref.read(khataViewModelProvider.notifier).loadEntries();
+
+      if (!mounted) return;
+
+      _motorUiTick.value++;
+    } finally {
+      _finalizingKhataFromTelemetry = false;
+    }
+  }
+
+  Future<void> _refresh() async {
+    await ref.read(khataViewModelProvider.notifier).loadEntries();
+
+    if (!mounted) return;
+
+    _initialLoadComplete = true;
+    await _syncMotorStateAndKhata();
   }
 
   List<KhataEntryModel> _filteredEntries(List<KhataEntryModel> entries) {
@@ -1829,33 +2272,39 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
     }).toList();
   }
 
-  void _showSnack(
-      String message,
-      bool isError, {
-        int seconds = 8,
-      }) {
+  void _showSnack(String message, bool isError, {int seconds = 8}) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        duration: Duration(seconds: isError ? seconds : 4),
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-        elevation: 10,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        backgroundColor: isError ? AppColors.error : AppColors.success,
-        content: Text(
-          message,
-          style: const TextStyle(
-            color: AppColors.white,
-            fontWeight: FontWeight.w800,
+    // Do not mutate Scaffold/Overlay while a bottom-sheet/dialog route is
+    // being deactivated. Schedule the snackbar for the next safe frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      if (messenger == null) return;
+
+      messenger.hideCurrentSnackBar();
+
+      messenger.showSnackBar(
+        SnackBar(
+          duration: Duration(seconds: isError ? seconds : 4),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          elevation: 10,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          backgroundColor: isError ? AppColors.error : AppColors.success,
+          content: Text(
+            message,
+            style: const TextStyle(
+              color: AppColors.white,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   Future<void> _showPriceSheet(KhataEntryModel entry) async {
@@ -1877,7 +2326,9 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
         return _KhataBottomSheet(
           bottom: bottom,
           title: "Calculate Bill",
-          subtitle: "Run hours: ${entry.runHours.toStringAsFixed(2)}",
+          subtitle: entry.isOpen
+              ? "Running time: ${_displayRunTime(entry, hasFreshTelemetry: _hasFreshTelemetry, motorConfirmedRunning: _motorConfirmedRunning, confirmedMotorStopAt: _confirmedMotorStopAt)}"
+              : "Run hours: ${entry.runHours.toStringAsFixed(2)}",
           children: [
             _SheetField(
               controller: priceController,
@@ -1902,10 +2353,7 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
 
                 Navigator.pop(
                   context,
-                  _BillInput(
-                    pricePerHour: price,
-                    cashReceived: cash,
-                  ),
+                  _BillInput(pricePerHour: price, cashReceived: cash),
                 );
               },
             ),
@@ -1914,16 +2362,33 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
       },
     );
 
+    if (result == null) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      priceController.dispose();
+      cashController.dispose();
+      return;
+    }
+
+    // Allow the modal route/keyboard overlay to finish deactivating before
+    // Riverpod updates the screen and the snackbar is shown.
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+
+    if (!mounted) {
+      priceController.dispose();
+      cashController.dispose();
+      return;
+    }
+
+    await ref
+        .read(khataViewModelProvider.notifier)
+        .updatePriceAndBill(
+          entry: entry,
+          pricePerHour: result.pricePerHour,
+          cashReceived: result.cashReceived,
+        );
+
     priceController.dispose();
     cashController.dispose();
-
-    if (result == null) return;
-
-    await ref.read(khataViewModelProvider.notifier).updatePriceAndBill(
-      entry: entry,
-      pricePerHour: result.pricePerHour,
-      cashReceived: result.cashReceived,
-    );
   }
 
   Future<void> _showPaymentSheet(KhataEntryModel entry) async {
@@ -1954,7 +2419,8 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
               color: AppColors.green,
               foregroundColor: AppColors.white,
               onPressed: () {
-                final value = double.tryParse(amountController.text.trim()) ?? 0;
+                final value =
+                    double.tryParse(amountController.text.trim()) ?? 0;
                 Navigator.pop(context, value);
               },
             ),
@@ -1963,14 +2429,24 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
       },
     );
 
+    if (amount == null) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      amountController.dispose();
+      return;
+    }
+
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+
+    if (!mounted) {
+      amountController.dispose();
+      return;
+    }
+
+    await ref
+        .read(khataViewModelProvider.notifier)
+        .addPayment(entry: entry, amount: amount);
+
     amountController.dispose();
-
-    if (amount == null) return;
-
-    await ref.read(khataViewModelProvider.notifier).addPayment(
-      entry: entry,
-      amount: amount,
-    );
   }
 
   Future<void> _showEditSheet(KhataEntryModel entry) async {
@@ -2058,14 +2534,31 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
       },
     );
 
+    if (updated == null) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      nameController.dispose();
+      hoursController.dispose();
+      priceController.dispose();
+      cashController.dispose();
+      return;
+    }
+
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+
+    if (!mounted) {
+      nameController.dispose();
+      hoursController.dispose();
+      priceController.dispose();
+      cashController.dispose();
+      return;
+    }
+
+    await ref.read(khataViewModelProvider.notifier).updateEntry(updated);
+
     nameController.dispose();
     hoursController.dispose();
     priceController.dispose();
     cashController.dispose();
-
-    if (updated == null) return;
-
-    await ref.read(khataViewModelProvider.notifier).updateEntry(updated);
   }
 
   Future<void> _confirmDelete(KhataEntryModel entry) async {
@@ -2073,6 +2566,14 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
 
     if (id == null || id.isEmpty) {
       _showSnack("Khata entry ID missing", true);
+      return;
+    }
+
+    if (entry.isOpen) {
+      _showSnack(
+        "Stop the motor and finalize this Khata session before deleting it.",
+        true,
+      );
       return;
     }
 
@@ -2092,7 +2593,9 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
             ),
           ),
           content: Text(
-            "This will permanently delete the entry for ${entry.customerName}.",
+            entry.isOpen
+                ? "This motor session is still open and cannot be deleted until it stops."
+                : "This will permanently delete the entry for ${entry.customerName}, including any unpaid balance.",
             style: TextStyle(
               color: AppThemeColors.subText(context),
               fontWeight: FontWeight.w600,
@@ -2127,37 +2630,45 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<KhataState>(
-      khataViewModelProvider,
-          (previous, next) {
-        if (next.error != null && previous?.error != next.error) {
-          _showSnack(next.error!, true, seconds: 12);
-        }
+    ref.listen<KhataState>(khataViewModelProvider, (previous, next) {
+      if (next.error != null && previous?.error != next.error) {
+        _showSnack(next.error!, true, seconds: 12);
+      }
 
-        if (next.message != null && previous?.message != next.message) {
-          _showSnack(next.message!, false);
-        }
-      },
+      if (next.message != null && previous?.message != next.message) {
+        _showSnack(next.message!, false);
+      }
+    });
+
+    // Watch ONLY actual Khata entries.
+    // Background isLoading/message changes do not rebuild the whole screen.
+    final allEntries = ref.watch(
+      khataViewModelProvider.select((state) => state.entries),
     );
 
-    final state = ref.watch(khataViewModelProvider);
+    // final deviceEntries = state.entries;
+    // final entries = _filteredEntries(state.entries);
+    final safeDeviceId = widget.deviceId.trim();
 
-    final deviceEntries = state.entries;
-    final entries = _filteredEntries(state.entries);
+    final deviceEntries = allEntries.where((entry) {
+      return entry.deviceId.trim() == safeDeviceId;
+    }).toList();
+
+    final entries = _filteredEntries(deviceEntries);
 
     final totalBill = entries.fold<double>(
       0,
-          (sum, item) => sum + item.totalBill,
+      (sum, item) => sum + item.totalBill,
     );
 
     final totalReceived = entries.fold<double>(
       0,
-          (sum, item) => sum + item.cashReceived,
+      (sum, item) => sum + item.cashReceived,
     );
 
     final totalRemaining = entries.fold<double>(
       0,
-          (sum, item) => sum + item.remainingBalance,
+      (sum, item) => sum + item.remainingBalance,
     );
 
     final width = MediaQuery.of(context).size.width;
@@ -2199,7 +2710,7 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
         actions: [
           IconButton(
             tooltip: "Refresh",
-            onPressed: state.isLoading ? null : _refresh,
+            onPressed: _refresh,
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
@@ -2246,7 +2757,7 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    if (state.isLoading && entries.isEmpty)
+                    if (!_initialLoadComplete && entries.isEmpty)
                       const Padding(
                         padding: EdgeInsets.all(34),
                         child: Center(
@@ -2261,32 +2772,43 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
                         message: "Please select a device first.",
                       )
                     else if (deviceEntries.isEmpty)
-                        _EmptyKhata(
-                          title: "No Khata entries for this device",
-                          message:
-                          "Entries for ${widget.deviceId} will appear after motor runs are billed.",
-                        )
-                      else if (entries.isEmpty)
-                          const _EmptyKhata(
-                            title: "No matching entries",
-                            message: "Try changing search text or payment filter.",
-                          )
-                        else
-                          _KhataList(
+                      _EmptyKhata(
+                        title: "No Khata entries for this device",
+                        message:
+                            "Entries for ${widget.deviceId} will appear after motor runs are billed.",
+                      )
+                    else if (entries.isEmpty)
+                      const _EmptyKhata(
+                        title: "No matching entries",
+                        message: "Try changing search text or payment filter.",
+                      )
+                    else
+                      ValueListenableBuilder<int>(
+                        valueListenable: _motorUiTick,
+                        builder: (context, _, __) {
+                          return _KhataList(
                             entries: entries,
+                            hasFreshTelemetry: _hasFreshTelemetry,
+                            motorConfirmedRunning: _motorConfirmedRunning,
+                            confirmedMotorStopAt: _confirmedMotorStopAt,
+                            clockTick: _clockTick,
                             onSetPrice: _showPriceSheet,
                             onPayment: _showPaymentSheet,
                             onEdit: _showEditSheet,
                             onDelete: _confirmDelete,
                             onSharePdf: (entry) {
-                              ref.read(khataPdfServiceProvider).shareEntryPdf(entry);
+                              ref
+                                  .read(khataPdfServiceProvider)
+                                  .shareEntryPdf(entry);
                             },
                             onPreviewPdf: (entry) {
                               ref
                                   .read(khataPdfServiceProvider)
                                   .previewEntryPdf(entry);
                             },
-                          ),
+                          );
+                        },
+                      ),
                   ],
                 ),
               ),
@@ -2300,6 +2822,10 @@ class _KhataScreenState extends ConsumerState<KhataScreen> {
 
 class _KhataList extends StatelessWidget {
   final List<KhataEntryModel> entries;
+  final bool hasFreshTelemetry;
+  final bool motorConfirmedRunning;
+  final DateTime? confirmedMotorStopAt;
+  final ValueListenable<int> clockTick;
   final ValueChanged<KhataEntryModel> onSetPrice;
   final ValueChanged<KhataEntryModel> onPayment;
   final ValueChanged<KhataEntryModel> onEdit;
@@ -2309,6 +2835,10 @@ class _KhataList extends StatelessWidget {
 
   const _KhataList({
     required this.entries,
+    required this.hasFreshTelemetry,
+    required this.motorConfirmedRunning,
+    required this.confirmedMotorStopAt,
+    required this.clockTick,
     required this.onSetPrice,
     required this.onPayment,
     required this.onEdit,
@@ -2330,6 +2860,10 @@ class _KhataList extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 14),
                 child: _KhataCard(
                   entry: entry,
+                  hasFreshTelemetry: hasFreshTelemetry,
+                  motorConfirmedRunning: motorConfirmedRunning,
+                  confirmedMotorStopAt: confirmedMotorStopAt,
+                  clockTick: clockTick,
                   onSetPrice: () => onSetPrice(entry),
                   onPayment: () => onPayment(entry),
                   onEdit: () => onEdit(entry),
@@ -2350,6 +2884,10 @@ class _KhataList extends StatelessWidget {
               width: (constraints.maxWidth - 16) / 2,
               child: _KhataCard(
                 entry: entry,
+                hasFreshTelemetry: hasFreshTelemetry,
+                motorConfirmedRunning: motorConfirmedRunning,
+                confirmedMotorStopAt: confirmedMotorStopAt,
+                clockTick: clockTick,
                 onSetPrice: () => onSetPrice(entry),
                 onPayment: () => onPayment(entry),
                 onEdit: () => onEdit(entry),
@@ -2369,10 +2907,7 @@ class _DeviceHeader extends StatelessWidget {
   final String deviceId;
   final int count;
 
-  const _DeviceHeader({
-    required this.deviceId,
-    required this.count,
-  });
+  const _DeviceHeader({required this.deviceId, required this.count});
 
   @override
   Widget build(BuildContext context) {
@@ -2380,10 +2915,7 @@ class _DeviceHeader extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [
-            AppColors.primaryDark,
-            AppColors.mintAccentDark,
-          ],
+          colors: [AppColors.primaryDark, AppColors.mintAccentDark],
         ),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
@@ -2442,9 +2974,7 @@ class _DeviceHeader extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.white.withOpacity(0.10),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: AppColors.white.withOpacity(0.12),
-              ),
+              border: Border.all(color: AppColors.white.withOpacity(0.12)),
             ),
             child: Text(
               "$count entries",
@@ -2584,9 +3114,7 @@ class _StatusChip extends StatelessWidget {
         color: selected ? AppColors.white : AppThemeColors.text(context),
         fontWeight: FontWeight.w800,
       ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
     );
   }
 }
@@ -2664,26 +3192,62 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    final bool isVerySmall = screenWidth < 360;
+    final bool isSmall = screenWidth >= 360 && screenWidth < 500;
+    final bool isTablet = screenWidth >= 500 && screenWidth < 900;
+
+    final double cardPadding = isVerySmall
+        ? 8
+        : isSmall
+        ? 10
+        : isTablet
+        ? 12
+        : 14;
+
+    final double iconBoxSize = isVerySmall
+        ? 30
+        : isSmall
+        ? 34
+        : 38;
+
+    final double iconSize = isVerySmall
+        ? 17
+        : isSmall
+        ? 19
+        : 22;
+
+    final double labelFontSize = isVerySmall
+        ? 10
+        : isSmall
+        ? 11
+        : 12.5;
+
+    final double valueFontSize = isVerySmall
+        ? 15
+        : isSmall
+        ? 17
+        : 20;
+
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(cardPadding),
       decoration: AppThemeColors.cardDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            height: 38,
-            width: 38,
+            height: iconBoxSize,
+            width: iconBoxSize,
             decoration: BoxDecoration(
               color: accent.withOpacity(0.16),
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(isVerySmall ? 10 : 13),
             ),
-            child: Icon(
-              icon,
-              color: accent,
-              size: 22,
-            ),
+            child: Icon(icon, color: accent, size: iconSize),
           ),
+
           const Spacer(),
+
           Text(
             label,
             maxLines: 1,
@@ -2691,17 +3255,25 @@ class _SummaryCard extends StatelessWidget {
             style: TextStyle(
               color: AppThemeColors.subText(context),
               fontWeight: FontWeight.w700,
-              fontSize: 12.5,
+              fontSize: labelFontSize,
             ),
           ),
-          const SizedBox(height: 5),
-          FittedBox(
-            child: Text(
-              value,
-              style: TextStyle(
-                color: AppThemeColors.text(context),
-                fontWeight: FontWeight.w900,
-                fontSize: 20,
+
+          SizedBox(height: isVerySmall ? 3 : 5),
+
+          SizedBox(
+            width: double.infinity,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: TextStyle(
+                  color: AppThemeColors.text(context),
+                  fontWeight: FontWeight.w900,
+                  fontSize: valueFontSize,
+                ),
               ),
             ),
           ),
@@ -2713,6 +3285,10 @@ class _SummaryCard extends StatelessWidget {
 
 class _KhataCard extends StatelessWidget {
   final KhataEntryModel entry;
+  final bool hasFreshTelemetry;
+  final bool motorConfirmedRunning;
+  final DateTime? confirmedMotorStopAt;
+  final ValueListenable<int> clockTick;
   final VoidCallback onSetPrice;
   final VoidCallback onPayment;
   final VoidCallback onEdit;
@@ -2722,6 +3298,10 @@ class _KhataCard extends StatelessWidget {
 
   const _KhataCard({
     required this.entry,
+    required this.hasFreshTelemetry,
+    required this.motorConfirmedRunning,
+    required this.confirmedMotorStopAt,
+    required this.clockTick,
     required this.onSetPrice,
     required this.onPayment,
     required this.onEdit,
@@ -2734,6 +3314,17 @@ class _KhataCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final statusColor = _statusColor(entry.paymentStatus);
     final canAddPayment = entry.totalBill > 0 && entry.remainingBalance > 0;
+
+    final sessionActuallyRunning =
+        entry.isOpen &&
+        entry.endTime == null &&
+        (!hasFreshTelemetry || motorConfirmedRunning);
+
+    final motorConfirmedOffWhileEntryOpen =
+        entry.isOpen &&
+        entry.endTime == null &&
+        hasFreshTelemetry &&
+        !motorConfirmedRunning;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -2815,6 +3406,10 @@ class _KhataCard extends StatelessWidget {
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
+              if (sessionActuallyRunning)
+                const _StatusBadge(label: "RUNNING", color: AppColors.success),
+              if (motorConfirmedOffWhileEntryOpen)
+                const _StatusBadge(label: "STOPPED", color: AppColors.error),
               _StatusBadge(
                 label: entry.paymentStatus.toUpperCase(),
                 color: statusColor,
@@ -2828,28 +3423,75 @@ class _KhataCard extends StatelessWidget {
           const SizedBox(height: 16),
           _InfoRow(label: "Device", value: entry.deviceId),
           _InfoRow(
-            label: "Run Hours",
-            value: entry.runHours.toStringAsFixed(2),
+            label: "ON Time",
+            value: _formatPakistanDateTime(entry.startTime),
+            strong: entry.startTime != null,
+            strongColor: entry.startTime != null ? AppColors.success : null,
           ),
           _InfoRow(
-            label: "Price Per Hour",
-            value: _money(entry.pricePerHour),
+            label: "OFF Time",
+            value: entry.endTime == null
+                ? (entry.isOpen ? "Running" : "-")
+                : _formatPakistanDateTime(entry.endTime),
+            strong: entry.endTime != null,
+            strongColor: entry.endTime != null ? AppColors.error : null,
           ),
-          _InfoRow(
-            label: "Total Bill",
-            value: _money(entry.totalBill),
-          ),
-          _InfoRow(
-            label: "Cash Received",
-            value: _money(entry.cashReceived),
-          ),
+          if (sessionActuallyRunning)
+            ValueListenableBuilder<int>(
+              valueListenable: clockTick,
+              builder: (context, _, __) {
+                return _InfoRow(
+                  label: "Running Time",
+                  value: _displayRunTime(
+                    entry,
+                    hasFreshTelemetry: hasFreshTelemetry,
+                    motorConfirmedRunning: motorConfirmedRunning,
+                    confirmedMotorStopAt: confirmedMotorStopAt,
+                  ),
+                  strong: true,
+                  strongColor: AppColors.success,
+                );
+              },
+            )
+          else
+            _InfoRow(
+              label: motorConfirmedOffWhileEntryOpen
+                  ? "Stopped Time"
+                  : "Run Hours",
+              value: (entry.isOpen || entry.endTime != null)
+                  ? _displayRunTime(
+                      entry,
+                      hasFreshTelemetry: hasFreshTelemetry,
+                      motorConfirmedRunning: motorConfirmedRunning,
+                      confirmedMotorStopAt: confirmedMotorStopAt,
+                    )
+                  : "${entry.runHours.toStringAsFixed(2)} hr",
+              strong: motorConfirmedOffWhileEntryOpen,
+              strongColor: motorConfirmedOffWhileEntryOpen
+                  ? AppColors.error
+                  : null,
+            ),
+          _InfoRow(label: "Price Per Hour", value: _money(entry.pricePerHour)),
+          _InfoRow(label: "Total Bill", value: _money(entry.totalBill)),
+          _InfoRow(label: "Cash Received", value: _money(entry.cashReceived)),
           _InfoRow(
             label: "Remaining",
             value: _money(entry.remainingBalance),
             strong: true,
-            strongColor:
-            entry.remainingBalance > 0 ? AppColors.error : AppColors.success,
+            strongColor: entry.remainingBalance > 0
+                ? AppColors.error
+                : AppColors.success,
           ),
+
+          // Show overpayment as customer credit/advance.
+          if (entry.advanceAmount > 0)
+            _InfoRow(
+              label: "Advance / Credit",
+              value: _money(entry.advanceAmount),
+              strong: true,
+              strongColor: AppColors.success,
+            ),
+
           const SizedBox(height: 14),
           Column(
             children: [
@@ -2916,10 +3558,7 @@ class _StatusBadge extends StatelessWidget {
   final String label;
   final Color color;
 
-  const _StatusBadge({
-    required this.label,
-    required this.color,
-  });
+  const _StatusBadge({required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -2946,10 +3585,7 @@ class _SoftBadge extends StatelessWidget {
   final IconData icon;
   final String label;
 
-  const _SoftBadge({
-    required this.icon,
-    required this.label,
-  });
+  const _SoftBadge({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -3004,35 +3640,35 @@ class _ActionButton extends StatelessWidget {
       height: 44,
       child: filled
           ? ElevatedButton.icon(
-        onPressed: onTap,
-        icon: Icon(icon, size: 17),
-        label: FittedBox(child: Text(label)),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: enabled ? color : AppColors.disabledDark,
-          foregroundColor: enabled ? textColor : AppColors.gray500,
-          disabledBackgroundColor: AppColors.disabledDark,
-          disabledForegroundColor: AppColors.gray500,
-          elevation: enabled ? 4 : 0,
-          shadowColor: color.withOpacity(0.25),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-      )
+              onPressed: onTap,
+              icon: Icon(icon, size: 17),
+              label: FittedBox(child: Text(label)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: enabled ? color : AppColors.disabledDark,
+                foregroundColor: enabled ? textColor : AppColors.gray500,
+                disabledBackgroundColor: AppColors.disabledDark,
+                disabledForegroundColor: AppColors.gray500,
+                elevation: enabled ? 4 : 0,
+                shadowColor: color.withOpacity(0.25),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            )
           : OutlinedButton.icon(
-        onPressed: onTap,
-        icon: Icon(icon, size: 17),
-        label: FittedBox(child: Text(label)),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: enabled ? textColor : AppColors.gray500,
-          side: BorderSide(
-            color: enabled ? color.withOpacity(0.55) : AppColors.gray600,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-      ),
+              onPressed: onTap,
+              icon: Icon(icon, size: 17),
+              label: FittedBox(child: Text(label)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: enabled ? textColor : AppColors.gray500,
+                side: BorderSide(
+                  color: enabled ? color.withOpacity(0.55) : AppColors.gray600,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
     );
   }
 }
@@ -3104,12 +3740,8 @@ class _KhataBottomSheet extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppThemeColors.card(context),
-        borderRadius: const BorderRadius.vertical(
-          top: Radius.circular(28),
-        ),
-        border: Border(
-          top: BorderSide(color: AppThemeColors.border(context)),
-        ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border(top: BorderSide(color: AppThemeColors.border(context))),
       ),
       padding: EdgeInsets.fromLTRB(20, 18, 20, bottom + 20),
       child: SingleChildScrollView(
@@ -3190,10 +3822,7 @@ class _SheetField extends StatelessWidget {
         ),
         focusedBorder: const OutlineInputBorder(
           borderRadius: BorderRadius.all(Radius.circular(16)),
-          borderSide: BorderSide(
-            color: AppColors.primary,
-            width: 1.4,
-          ),
+          borderSide: BorderSide(color: AppColors.primary, width: 1.4),
         ),
       ),
     );
@@ -3226,10 +3855,7 @@ class _PrimarySheetButton extends StatelessWidget {
       child: ElevatedButton.icon(
         onPressed: onPressed,
         icon: Icon(icon),
-        label: Text(
-          label,
-          style: const TextStyle(fontWeight: FontWeight.w900),
-        ),
+        label: Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
         style: ElevatedButton.styleFrom(
           backgroundColor: bg,
           foregroundColor: fg,
@@ -3248,10 +3874,7 @@ class _EmptyKhata extends StatelessWidget {
   final String title;
   final String message;
 
-  const _EmptyKhata({
-    required this.title,
-    required this.message,
-  });
+  const _EmptyKhata({required this.title, required this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -3304,10 +3927,7 @@ class _BillInput {
   final double pricePerHour;
   final double cashReceived;
 
-  const _BillInput({
-    required this.pricePerHour,
-    required this.cashReceived,
-  });
+  const _BillInput({required this.pricePerHour, required this.cashReceived});
 }
 
 Color _statusColor(String value) {
@@ -3333,11 +3953,92 @@ String _paymentStatus({
   return "unpaid";
 }
 
+String _displayRunTime(
+  KhataEntryModel entry, {
+  required bool hasFreshTelemetry,
+  required bool motorConfirmedRunning,
+  required DateTime? confirmedMotorStopAt,
+}) {
+  final startTime = entry.startTime;
+
+  if (startTime == null) {
+    final totalSeconds = (entry.runHours * 3600).round();
+    return _formatDuration(totalSeconds < 0 ? 0 : totalSeconds);
+  }
+
+  // Persisted backend/database endTime is always authoritative.
+  // Duration math uses UTC instants so Pakistan display conversion does
+  // not change the real elapsed duration.
+  if (entry.endTime != null) {
+    final seconds = entry.endTime!
+        .toUtc()
+        .difference(startTime.toUtc())
+        .inSeconds;
+
+    return _formatDuration(seconds < 0 ? 0 : seconds);
+  }
+
+  if (entry.isOpen) {
+    // If VFD is confirmed OFF but the server endTime has not arrived yet,
+    // do not invent an OFF timestamp from the phone. Keep the last visible
+    // value frozen until loadEntries() receives the saved database endTime.
+    if (hasFreshTelemetry && !motorConfirmedRunning) {
+      return "Waiting for server...";
+    }
+
+    // The session always starts from the original SERVER/DATABASE startTime.
+    // If the app is killed and reopened, this recomputes from the same
+    // startTime instead of restarting the Khata timer from zero.
+    final seconds = DateTime.now()
+        .toUtc()
+        .difference(startTime.toUtc())
+        .inSeconds;
+
+    return _formatDuration(seconds < 0 ? 0 : seconds);
+  }
+
+  final totalSeconds = (entry.runHours * 3600).round();
+  return _formatDuration(totalSeconds < 0 ? 0 : totalSeconds);
+}
+
+DateTime _toPakistanTime(DateTime value) {
+  return value.toUtc().add(const Duration(hours: 5));
+}
+
+String _formatPakistanDateTime(DateTime? value) {
+  if (value == null) return "-";
+
+  final pakistanTime = _toPakistanTime(value);
+
+  final year = pakistanTime.year.toString().padLeft(4, "0");
+  final month = pakistanTime.month.toString().padLeft(2, "0");
+  final day = pakistanTime.day.toString().padLeft(2, "0");
+
+  final hour24 = pakistanTime.hour;
+  final hour12 = hour24 == 0
+      ? 12
+      : hour24 > 12
+      ? hour24 - 12
+      : hour24;
+
+  final hour = hour12.toString().padLeft(2, "0");
+  final minute = pakistanTime.minute.toString().padLeft(2, "0");
+  final second = pakistanTime.second.toString().padLeft(2, "0");
+  final period = hour24 >= 12 ? "PM" : "AM";
+
+  return "$year-$month-$day  $hour:$minute:$second $period PKT";
+}
+
+String _formatDuration(int totalSeconds) {
+  final hours = totalSeconds ~/ 3600;
+  final minutes = (totalSeconds % 3600) ~/ 60;
+  final seconds = totalSeconds % 60;
+
+  return "${hours.toString().padLeft(2, "0")}:"
+      "${minutes.toString().padLeft(2, "0")}:"
+      "${seconds.toString().padLeft(2, "0")}";
+}
+
 String _money(double value) {
   return value.toStringAsFixed(2);
 }
-
-
-
-
-

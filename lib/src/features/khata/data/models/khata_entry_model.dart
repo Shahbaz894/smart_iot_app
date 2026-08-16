@@ -9,12 +9,14 @@ class KhataEntryModel {
   final double runHours;
   final double totalBill;
   final double remainingBalance;
+  final double advanceAmount;
   final String paymentStatus;
 
   final DateTime? startTime;
   final DateTime? endTime;
 
-  /// open / closed
+  /// open / closed MOTOR SESSION status.
+  /// This is deliberately separate from paid / unpaid payment status.
   final String status;
 
   const KhataEntryModel({
@@ -28,6 +30,7 @@ class KhataEntryModel {
     double? runHours,
     double? totalBill,
     double? remainingBalance,
+    double? advanceAmount,
     String? paymentStatus,
     this.startTime,
     this.endTime,
@@ -47,6 +50,7 @@ class KhataEntryModel {
         totalBill = totalBill ?? totalAmount ?? 0,
         remainingBalance =
             remainingBalance ?? remainingAmount ?? 0,
+        advanceAmount = advanceAmount ?? 0,
         paymentStatus = paymentStatus ?? "unpaid",
         status = status ?? "closed";
 
@@ -56,6 +60,8 @@ class KhataEntryModel {
   double get paidAmount => cashReceived;
 
   double get remainingAmount => remainingBalance;
+
+  double get creditAmount => advanceAmount;
 
   bool get isOpen => status.toLowerCase() == "open";
 
@@ -78,6 +84,7 @@ class KhataEntryModel {
     double? runHours,
     double? totalBill,
     double? remainingBalance,
+    double? advanceAmount,
     String? paymentStatus,
     DateTime? startTime,
     DateTime? endTime,
@@ -103,6 +110,7 @@ class KhataEntryModel {
       remainingBalance ??
           remainingAmount ??
           this.remainingBalance,
+      advanceAmount: advanceAmount ?? this.advanceAmount,
       paymentStatus:
       paymentStatus ?? this.paymentStatus,
       startTime: startTime ?? this.startTime,
@@ -114,19 +122,29 @@ class KhataEntryModel {
   KhataEntryModel addPayment(double amount) {
     final newCashReceived = cashReceived + amount;
 
+    final difference = totalBill - newCashReceived;
+
     final double newRemaining =
-    (totalBill - newCashReceived) <= 0
-        ? 0
-        : (totalBill - newCashReceived);
+    difference > 0 ? difference : 0;
+
+    final double newAdvance =
+    newCashReceived > totalBill
+        ? newCashReceived - totalBill
+        : 0;
 
     return copyWith(
       cashReceived: newCashReceived,
       remainingBalance: newRemaining,
+      advanceAmount: newAdvance,
       paymentStatus: _paymentStatus(
         cashReceived: newCashReceived,
         totalBill: totalBill,
       ),
-      status: newRemaining <= 0 ? "closed" : "open",
+
+      // IMPORTANT:
+      // Payment state must never open/close the MOTOR session.
+      // Preserve the existing motor-session status.
+      status: status,
     );
   }
 
@@ -140,9 +158,12 @@ class KhataEntryModel {
       "run_hours": runHours,
       "total_bill": totalBill,
       "remaining_balance": remainingBalance,
+      "advance_amount": advanceAmount,
       "payment_status": paymentStatus,
-      "start_time": startTime?.toIso8601String(),
-      "end_time": endTime?.toIso8601String(),
+
+      // Keep old keys for backward compatibility.
+      "start_time": startTime?.toUtc().toIso8601String(),
+      "end_time": endTime?.toUtc().toIso8601String(),
       "status": status,
     };
 
@@ -170,15 +191,61 @@ class KhataEntryModel {
           json["balance"],
     );
 
-    final paymentStatus =
+    final advanceAmount = _toDouble(
+      json["advance_amount"],
+    );
+
+    final motorLogId =
+        json["motor_log_id"]?.toString() ?? "";
+
+    // Backend now returns started_at / ended_at.
+    // Keep start_time / end_time as fallbacks for old API responses.
+    final startTime = _toDate(
+      json["started_at"] ?? json["start_time"],
+    );
+
+    final endTime = _toDate(
+      json["ended_at"] ?? json["end_time"],
+    );
+
+    final rawStatus =
+    json["status"]?.toString().trim().toLowerCase();
+
+    final backendIsOpen = _toBool(json["is_open"]);
+
+    // Motor session state must come from motor fields,
+    // NOT from payment_status or is_cleared.
+    String motorStatus;
+
+    if (rawStatus == "open" || rawStatus == "closed") {
+      motorStatus = rawStatus!;
+    } else if (motorLogId.trim().isNotEmpty) {
+      if (backendIsOpen != null) {
+        motorStatus =
+        backendIsOpen && endTime == null ? "open" : "closed";
+      } else {
+        // Backward compatibility when old backend omitted is_open.
+        motorStatus =
+        startTime != null && endTime == null ? "open" : "closed";
+      }
+    } else {
+      // Manual Khata rows are not live motor sessions.
+      // This also prevents old DB rows with default is_open=true
+      // from appearing as running.
+      motorStatus = "closed";
+    }
+
+    var paymentStatus =
         json["payment_status"]?.toString() ??
             _paymentStatus(
               cashReceived: cashReceived,
               totalBill: totalBill,
             );
 
-    final bool isCleared =
-        json["is_cleared"] == true;
+    // An open motor session with provisional bill=0 must not display PAID.
+    if (motorStatus == "open" && totalBill <= 0) {
+      paymentStatus = "unpaid";
+    }
 
     return KhataEntryModel(
       id: json["id"]?.toString(),
@@ -192,8 +259,7 @@ class KhataEntryModel {
       pricePerHour:
       _toDouble(json["price_per_hour"]),
 
-      motorLogId:
-      json["motor_log_id"]?.toString() ?? "",
+      motorLogId: motorLogId,
 
       cashReceived: cashReceived,
 
@@ -205,18 +271,15 @@ class KhataEntryModel {
 
       remainingBalance: remainingBalance,
 
+      advanceAmount: advanceAmount,
+
       paymentStatus: paymentStatus,
 
-      startTime: _toDate(json["start_time"]),
+      startTime: startTime,
 
-      endTime: _toDate(json["end_time"]),
+      endTime: endTime,
 
-      status: json["status"]?.toString() ??
-          ((isCleared ||
-              paymentStatus.toLowerCase() ==
-                  "paid")
-              ? "closed"
-              : "open"),
+      status: motorStatus,
     );
   }
 
@@ -233,12 +296,52 @@ class KhataEntryModel {
         0;
   }
 
+  static bool? _toBool(dynamic value) {
+    if (value == null) return null;
+    if (value is bool) return value;
+
+    final text = value.toString().trim().toLowerCase();
+
+    if (text == "true" || text == "1") return true;
+    if (text == "false" || text == "0") return false;
+
+    return null;
+  }
+
   static DateTime? _toDate(dynamic value) {
     if (value == null) return null;
 
-    return DateTime.tryParse(
-      value.toString(),
+    final raw = value.toString().trim();
+
+    if (raw.isEmpty) return null;
+
+    final parsed = DateTime.tryParse(raw);
+
+    if (parsed == null) return null;
+
+    // If backend already supplied Z or an offset, Dart knows the timezone.
+    final hasTimezone = raw.endsWith("Z") ||
+        RegExp(r'[+-]\d{2}:\d{2}$').hasMatch(raw);
+
+    if (hasTimezone) {
+      return parsed.toLocal();
+    }
+
+    // Your backend timestamps are currently returned without a timezone
+    // suffix but are UTC (for example 13:26 UTC = 18:26 Pakistan).
+    // Treat a naive backend timestamp as UTC, then convert to phone local time.
+    final utc = DateTime.utc(
+      parsed.year,
+      parsed.month,
+      parsed.day,
+      parsed.hour,
+      parsed.minute,
+      parsed.second,
+      parsed.millisecond,
+      parsed.microsecond,
     );
+
+    return utc.toLocal();
   }
 
   static String _paymentStatus({
@@ -258,3 +361,4 @@ class KhataEntryModel {
     return "unpaid";
   }
 }
+

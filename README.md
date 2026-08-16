@@ -388,3 +388,5 @@ lastMsgTime = now;
     }
 }
 }
+
+http://157.245.55.83/telemetry/ESP32_001_TW/latest

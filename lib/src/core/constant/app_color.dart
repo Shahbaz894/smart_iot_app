@@ -15,7 +15,7 @@ abstract class AppColors {
   static const Color accent = Color(0xFFFF9800); // Alerts / upgrade
 
 
-
+  //static const Color darkBgSoft = Color(0xFF0F91D0);
   static const Color darkBgSoft = Color(0xFF0B1120);
   static const Color darkSurfaceSoft = Color(0xFF111827);
   static const Color darkCardSoft = Color(0xFF172033);
@@ -100,7 +100,13 @@ abstract class AppColors {
   static const Color sliderInactiveDark = gray700;
   static const Color sliderInactiveLight = gray300;
 
+  static const Color greenLight = Color(0xFF66BB6A);
+  static const Color green = Color(0xFF2E7D32);
+  static const Color greenDark = Color(0xFF145A20);
+
   static const Color sliderPowerActive = green;
+  static const Color sliderPowerLight = greenLight;
+  static const Color sliderPowerDark = greenDark;
   static const Color sliderPowerInactive = gray600;
 
   static const Color sliderTempCold = blueLight;
@@ -133,7 +139,7 @@ abstract class AppColors {
   // UTILITY COLORS
   // ---------------------------------------------------------------------------
   static const Color red = Color(0xFFE53935);
-  static const Color green = Color(0xFF43A047);
+
   static const Color yellow = Color(0xFFFDD835);
   static const Color purple = Color(0xFF8E24AA);
 
@@ -148,7 +154,7 @@ abstract class AppColors {
 // ---------------------------------------------------------------------------
 
   static const Color colorPrimary = Color(0xFF1565C0);
-  static const Color colorPrimaryDark = Color(0xFF0D47A1);
+  static const Color colorPrimaryDark =  Color(0xFF0F91D0);
   static const Color colorPrimaryLight = Color(0xFF42A5F5);
 
   static const Color colorElectricBlue = Color(0xFF2979FF);
